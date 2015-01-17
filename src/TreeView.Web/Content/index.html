@@ -1,0 +1,92 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title></title>
+    <link href="bootstrap.min.css" rel="stylesheet" />
+    <link href="bootstrap-theme.min.css" rel="stylesheet" />
+    <link href="font-awesome.min.css" rel="stylesheet" />
+
+    <style type="text/css">
+        .container-full {
+          width: 100%;
+        }
+        .content-tree{
+            list-style:none;
+            padding:0; 
+            margin:0;   
+        }
+
+        .content-tree ul{
+            list-style:none;
+            padding-left:10px;
+        }
+
+        .content-tree li{
+            
+        }
+
+        .content-tree a, .content-tree a:hover{
+            text-decoration:none;
+        }
+
+        .diff-icon{
+            position: absolute;
+            left: 2px;
+            line-height: 19px;
+        }
+
+        .diff-icon.fa-exclamation-circle{
+            color:#7a077b;
+        }
+
+        .diff-icon.fa-check-circle{
+            color:green;
+        }
+
+        .diff-icon.fa-minus-circle{
+            color:red;
+        }
+
+        .diff-icon.fa-plus-circle{
+            color:blue;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container container-full">
+        <div class="row">
+            <div class="col-xs-2">
+                <h4>Content Tree</h4>
+                <ul class="content-tree">
+                    <li data-bind="with: root">
+                        <i class="fa diff-icon" data-bind="css: diffClass"></i>
+                        <a href="#" data-bind="click: toggleExpand"><i class="fa" data-bind="css: expandClass"></i></a>
+                        <a href="#" data-bind="click: showDetails, text: name"></a>
+                        <ul data-bind="template: {name: 'node-tmpl', foreach: children}, visible: expanded"></ul>
+                    </li>
+                </ul>
+            </div>
+            <div class="col-xs-5">
+                <h4>Source</h4>
+            </div>
+            <div class="col-xs-5">
+                <h4>Target</h4>
+            </div>
+        </div>
+    </div>
+
+    <script id="node-tmpl" type="text/html">
+        <li>
+            <i class="fa diff-icon" data-bind="css: diffClass"></i>
+            <a href="#" data-bind="click: toggleExpand"><i class="fa" data-bind="css: expandClass"></i></a>
+            <a href="#" data-bind="text: name"></a>
+            <ul data-bind="template: {name: 'node-tmpl', foreach: children}, visible: expanded"></ul>
+        </li>
+    </script>
+
+    <script src="../Scripts/knockout-3.2.0.debug.js"></script>
+    <script src="../Js/app.js"></script>
+</body>
+</html>
