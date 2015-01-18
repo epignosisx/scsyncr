@@ -1,6 +1,60 @@
 ﻿/// <reference path="../scripts/typings/knockout/knockout.d.ts" />
 var Tree;
 (function (Tree) {
+    var MessageBus = (function () {
+        function MessageBus() {
+            this.listenersHash = {};
+        }
+        MessageBus.prototype.listen = function (messageType, callback) {
+            var listeners = this.listenersHash[messageType] || [];
+            listeners.push(callback);
+            this.listenersHash[messageType] = listeners;
+        };
+
+        MessageBus.prototype.send = function (messageType, sender, data) {
+            var listeners = this.listenersHash[messageType] || [], i = 0, l = listeners.length;
+
+            for (; i < l; i++) {
+                listeners[i](sender, data);
+            }
+        };
+        MessageBus.current = new MessageBus();
+        return MessageBus;
+    })();
+    Tree.MessageBus = MessageBus;
+
+    var ContextualMenuAction = (function () {
+        function ContextualMenuAction(title, action, icon, description) {
+            this.title = title;
+            this.action = action;
+            this.icon = icon;
+            this.description = description;
+        }
+        return ContextualMenuAction;
+    })();
+    Tree.ContextualMenuAction = ContextualMenuAction;
+
+    var ContextualMenu = (function () {
+        function ContextualMenu() {
+            this.actions = [];
+        }
+        return ContextualMenu;
+    })();
+    Tree.ContextualMenu = ContextualMenu;
+
+    var Viewer = (function () {
+        function Viewer() {
+            this.source = ko.observable(null);
+            this.target = ko.observable(null);
+        }
+        Viewer.prototype.show = function (source, target) {
+            this.source(source);
+            this.target(target);
+        };
+        return Viewer;
+    })();
+    Tree.Viewer = Viewer;
+
     var ItemComparer = (function () {
         function ItemComparer() {
         }
@@ -11,6 +65,28 @@ var Tree;
     })();
     Tree.ItemComparer = ItemComparer;
 
+    (function (DiffType) {
+        DiffType[DiffType["Remove"] = 0] = "Remove";
+        DiffType[DiffType["Add"] = 1] = "Add";
+        DiffType[DiffType["Unmodified"] = 2] = "Unmodified";
+        DiffType[DiffType["Modified"] = 3] = "Modified";
+    })(Tree.DiffType || (Tree.DiffType = {}));
+    var DiffType = Tree.DiffType;
+
+    var DiffDetail = (function () {
+        function DiffDetail(type, className, title) {
+            this.type = type;
+            this.className = className;
+            this.title = title;
+        }
+        DiffDetail.remove = new DiffDetail(0 /* Remove */, "fa-minus-circle", "Does not exists in source, will be removed in target.");
+        DiffDetail.add = new DiffDetail(1 /* Add */, "fa-plus-circle", "Does not exists in target, will be added in target.");
+        DiffDetail.unmodified = new DiffDetail(2 /* Unmodified */, "fa-check-circle", "Same in source and target. No action will be taken.");
+        DiffDetail.modified = new DiffDetail(3 /* Modified */, "fa-exclamation-circle", "Different between source and target. Target will be overriden.");
+        return DiffDetail;
+    })();
+    Tree.DiffDetail = DiffDetail;
+
     var Node = (function () {
         function Node(source, target, children) {
             var _this = this;
@@ -18,7 +94,7 @@ var Tree;
             this.childrenLoaded = ko.observable(false);
             this.expanded = ko.observable(false);
             this.loadingChildren = ko.observable(false);
-            this.diffClass = ko.observable("");
+            this.syncExcluded = ko.observable(false);
             this.source = source;
             this.target = target;
             this.children.push.apply(this.children, children);
@@ -32,7 +108,13 @@ var Tree;
             this.name = ko.computed(function () {
                 return _this.source ? _this.source.name : _this.target.name;
             });
-            this.diffClass(this.getDiffClass());
+            this.diffDetails = this.getDiffDetails();
+            this.diffClass = ko.computed(function () {
+                return _this.syncExcluded() ? _this.diffDetails.className + " diff-icon-disabled" : _this.diffDetails.className;
+            });
+            this.diffTitle = ko.computed(function () {
+                return _this.syncExcluded() ? "Excluded: " + _this.diffDetails.title : _this.diffDetails.title;
+            });
         }
         Node.prototype.toggleExpand = function () {
             var _this = this;
@@ -50,21 +132,61 @@ var Tree;
             }
         };
 
-        Node.prototype.getDiffClass = function () {
+        Node.prototype.getDiffDetails = function () {
             if (!this.source) {
-                return "fa-minus-circle";
+                return DiffDetail.remove;
             } else if (!this.target) {
-                return "fa-plus-circle";
+                return DiffDetail.add;
             } else {
                 var comparer = new ItemComparer();
                 if (comparer.compare(this.source, this.target)) {
-                    return "fa-check-circle";
+                    return DiffDetail.unmodified;
                 }
-                return "fa-exclamation-circle";
+                return DiffDetail.modified;
             }
         };
 
         Node.prototype.showDetails = function () {
+            var menu = new ContextualMenu();
+
+            if (this.diffDetails.type == 3 /* Modified */) {
+                menu.actions.push(new ContextualMenuAction("Merge", this.merge.bind(this), "octicon octicon-git-merge", "Merge conflicts between source and target."));
+            } else if (this.diffDetails.type == 1 /* Add */) {
+                menu.actions.push(new ContextualMenuAction("Exclude", this.exclude.bind(this), "fa fa-ban", "Prevents source item from being added to target."));
+                //menu.actions.push(new ContextualMenuAction("Undo Exclude", this.ignore.bind(this), "fa fa-undo", "Prevents source item from being added to target."));
+            } else if (this.diffDetails.type == 0 /* Remove */) {
+                menu.actions.push(new ContextualMenuAction("Keep Target", this.keepTarget.bind(this), "octicon octicon-bookmark", "Prevents target item from being removed."));
+                menu.actions.push(new ContextualMenuAction("Keep Target & Children", this.removeTarget.bind(this), "octicon octicon-bookmark", "Prevents target item and its children from being removed"));
+                //menu.actions.push(new ContextualMenuAction("Undo Keep Target", this.removeTarget.bind(this), "fa fa-undo", "Undo: Prevents target item from being removed."));
+                //menu.actions.push(new ContextualMenuAction("Undo Keep Target & Children", this.removeTarget.bind(this), "fa fa-undo", "Undo: Prevents target item and its children from being removed"));
+            } else if (this.diffDetails.type == 2 /* Unmodified */) {
+            }
+
+            if (this.diffDetails.type == 1 /* Add */ || this.diffDetails.type == 0 /* Remove */) {
+                menu.actions.push(new ContextualMenuAction("Sync", this.sync.bind(this), "octicon octicon-git-pull-request", "Commit changes to item to target."));
+                menu.actions.push(new ContextualMenuAction("Sync With Children", this.syncWithChildren.bind(this), "octicon octicon-git-pull-request", "Commit changes to item and children to target."));
+            }
+
+            MessageBus.current.send("new-contextual-menu", this, menu);
+        };
+
+        Node.prototype.exclude = function () {
+            this.syncExcluded(true);
+        };
+
+        Node.prototype.merge = function () {
+        };
+
+        Node.prototype.removeTarget = function () {
+        };
+
+        Node.prototype.keepTarget = function () {
+        };
+
+        Node.prototype.sync = function () {
+        };
+
+        Node.prototype.syncWithChildren = function () {
         };
         return Node;
     })();
@@ -81,10 +203,25 @@ var Tree;
 
     var ViewModel = (function () {
         function ViewModel() {
+            this.viewer = new Viewer();
+            this.navigation = new Navigation();
         }
         return ViewModel;
     })();
     Tree.ViewModel = ViewModel;
+
+    var Navigation = (function () {
+        function Navigation() {
+            this.contextualMenu = ko.observable(new ContextualMenu());
+            MessageBus.current.listen("new-contextual-menu", this.newMenu.bind(this));
+        }
+        Navigation.prototype.newMenu = function (sender, data) {
+            var menu = data;
+            this.contextualMenu(menu);
+        };
+        return Navigation;
+    })();
+    Tree.Navigation = Navigation;
 
     function populateNode(level, limit, index, childrenTotal) {
         var sourceItem = Math.random() < 0.5 ? null : new Item({ id: level.toString(), name: "Node " + level + "." + index });

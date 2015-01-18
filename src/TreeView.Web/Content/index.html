@@ -6,11 +6,29 @@
     <link href="bootstrap.min.css" rel="stylesheet" />
     <link href="bootstrap-theme.min.css" rel="stylesheet" />
     <link href="font-awesome.min.css" rel="stylesheet" />
+    <link href="octicons/octicons.css" rel="stylesheet" />
 
     <style type="text/css">
-        .container-full {
+        .container-full-width {
           width: 100%;
         }
+
+        .container-body{
+            margin-top:50px;
+        }
+
+        .contextual-menu .fa,
+        .contextual-menu .octicon{
+            color:#c6c6c6;
+        }
+
+        .contextual-menu a:hover .fa,
+        .contextual-menu a:focus .fa,
+        .contextual-menu a:hover .octicon,
+        .contextual-menu a:focus .octicon {
+            color:white;
+        }
+
         .content-tree{
             list-style:none;
             padding:0; 
@@ -36,6 +54,10 @@
             line-height: 19px;
         }
 
+        .diff-icon-disabled {
+            opacity:0.4;
+        }
+
         .diff-icon.fa-exclamation-circle{
             color:#7a077b;
         }
@@ -55,13 +77,24 @@
     </style>
 </head>
 <body>
-    <div class="container container-full">
+
+    <nav class="navbar navbar-inverse navbar-fixed-top contextual-menu">
+        <div class="container container-full-width">
+            <div id="navbar" class="navbar-collapse collapse">
+                <ul class="nav navbar-nav" data-bind="foreach: navigation.contextualMenu().actions">
+                    <li><a href="#" data-bind="click: action"><i data-bind="css: icon, visible: icon"></i> <span data-bind="text: title"></span></a></li>
+                </ul>
+            </div><!--/.nav-collapse -->
+        </div>
+    </nav>
+
+    <div class="container container-full-width container-body">
         <div class="row">
             <div class="col-xs-2">
                 <h4>Content Tree</h4>
                 <ul class="content-tree">
                     <li data-bind="with: root">
-                        <i class="fa diff-icon" data-bind="css: diffClass"></i>
+                        <i class="fa diff-icon" data-bind="css: diffClass, attr: { title: diffTitle }"></i>
                         <a href="#" data-bind="click: toggleExpand"><i class="fa" data-bind="css: expandClass"></i></a>
                         <a href="#" data-bind="click: showDetails, text: name"></a>
                         <ul data-bind="template: {name: 'node-tmpl', foreach: children}, visible: expanded"></ul>
@@ -79,9 +112,9 @@
 
     <script id="node-tmpl" type="text/html">
         <li>
-            <i class="fa diff-icon" data-bind="css: diffClass"></i>
+            <i class="fa diff-icon" data-bind="css: diffClass, attr: { title: diffTitle }"></i>
             <a href="#" data-bind="click: toggleExpand"><i class="fa" data-bind="css: expandClass"></i></a>
-            <a href="#" data-bind="text: name"></a>
+            <a href="#" data-bind="click: showDetails, text: name"></a>
             <ul data-bind="template: {name: 'node-tmpl', foreach: children}, visible: expanded"></ul>
         </li>
     </script>

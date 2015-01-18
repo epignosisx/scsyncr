@@ -2,13 +2,88 @@
 
 module Tree {
 
+    export class MessageBus {
+
+        static current: MessageBus = new MessageBus();
+
+        private listenersHash: { [messageType: string]: Array<(sender: any, data: any) => void> } = {};
+
+        listen(messageType: string, callback: (sender: any, data: any) => void) {
+            var listeners = this.listenersHash[messageType] || [];
+            listeners.push(callback);
+            this.listenersHash[messageType] = listeners;
+        }
+
+        send(messageType: string, sender: any, data: any) {
+            var listeners = this.listenersHash[messageType] || [],
+                i = 0, l = listeners.length;
+
+            for (; i < l; i++) {
+                listeners[i](sender, data);
+            }
+        }
+    }
+
+    export class ContextualMenuAction {
+        title: string;
+        icon: string;
+        action: () => void;
+        description: string;
+
+        constructor(title: string, action: () => void, icon: string, description: string) {
+            this.title = title;
+            this.action = action;
+            this.icon = icon;
+            this.description = description;
+        }
+    }
+
+    export class ContextualMenu {
+        actions: ContextualMenuAction[] = [];
+    }
+
+    export class Viewer {
+        private source: KnockoutObservable<Item> = ko.observable(null);
+        private target: KnockoutObservable<Item> = ko.observable(null);
+
+        show(source: Item, target: Item) {
+            this.source(source);
+            this.target(target);
+        }
+    }
+
     export class ItemComparer {
         compare(source: Item, target: Item) {
             return source.field == target.field;
         }
     }
 
+    export enum DiffType {
+        Remove,
+        Add,
+        Unmodified,
+        Modified
+    }
+
+    export class DiffDetail {
+        type: DiffType;
+        className: string;
+        title: string;
+
+        constructor(type: DiffType, className: string, title: string) {
+            this.type = type;
+            this.className = className;
+            this.title = title;
+        }
+
+        static remove: DiffDetail = new DiffDetail(DiffType.Remove, "fa-minus-circle", "Does not exists in source, will be removed in target.");
+        static add: DiffDetail = new DiffDetail(DiffType.Add, "fa-plus-circle", "Does not exists in target, will be added in target.");
+        static unmodified: DiffDetail = new DiffDetail(DiffType.Unmodified, "fa-check-circle", "Same in source and target. No action will be taken.");
+        static modified: DiffDetail = new DiffDetail(DiffType.Modified, "fa-exclamation-circle", "Different between source and target. Target will be overriden.");
+    }
+
     export class Node {
+
         source: Item;
         target: Item;
         children: KnockoutObservableArray<Node> = ko.observableArray([]);
@@ -16,7 +91,10 @@ module Tree {
         expanded: KnockoutObservable<boolean> = ko.observable(false);
         loadingChildren: KnockoutObservable<boolean> = ko.observable(false);
         expandClass: KnockoutComputed<string>;
-        diffClass: KnockoutObservable<string> = ko.observable("");
+        diffClass: KnockoutComputed<string>;
+        diffTitle: KnockoutComputed<string>;
+        diffDetails: DiffDetail;
+        syncExcluded: KnockoutObservable<boolean> = ko.observable(false);
         name: KnockoutComputed<string>;
 
         constructor(source: Item, target: Item, children: Node[]) {
@@ -33,7 +111,13 @@ module Tree {
             this.name = ko.computed(() => {
                 return this.source ? this.source.name : this.target.name;
             });
-            this.diffClass(this.getDiffClass());
+            this.diffDetails = this.getDiffDetails();
+            this.diffClass = ko.computed(() => {
+                return this.syncExcluded() ? this.diffDetails.className + " diff-icon-disabled" : this.diffDetails.className;
+            });
+            this.diffTitle = ko.computed(() => {
+                return this.syncExcluded() ? "Excluded: " + this.diffDetails.title : this.diffDetails.title; 
+            });
         }
 
         toggleExpand() {
@@ -55,22 +139,62 @@ module Tree {
             }
         }
 
-        getDiffClass() {
+        getDiffDetails(): DiffDetail {
             if (!this.source) {
-                return "fa-minus-circle";
+                return DiffDetail.remove;
             } else if (!this.target) {
-                return "fa-plus-circle";
+                return DiffDetail.add;
             } else {
                 var comparer = new ItemComparer();
                 if (comparer.compare(this.source, this.target)) {
-                    return "fa-check-circle";
+                    return DiffDetail.unmodified;
                 }
-                return "fa-exclamation-circle";
+                return DiffDetail.modified;
             }
         }
 
         showDetails() {
+            var menu = new ContextualMenu();
 
+            if (this.diffDetails.type == DiffType.Modified) {
+                menu.actions.push(new ContextualMenuAction("Merge", this.merge.bind(this), "octicon octicon-git-merge", "Merge conflicts between source and target."));
+            } else if (this.diffDetails.type == DiffType.Add) {
+                menu.actions.push(new ContextualMenuAction("Exclude", this.exclude.bind(this), "fa fa-ban", "Prevents source item from being added to target."));
+                //menu.actions.push(new ContextualMenuAction("Undo Exclude", this.ignore.bind(this), "fa fa-undo", "Prevents source item from being added to target."));
+            } else if (this.diffDetails.type == DiffType.Remove) {
+                menu.actions.push(new ContextualMenuAction("Keep Target", this.keepTarget.bind(this), "octicon octicon-bookmark", "Prevents target item from being removed."));
+                menu.actions.push(new ContextualMenuAction("Keep Target & Children", this.removeTarget.bind(this), "octicon octicon-bookmark", "Prevents target item and its children from being removed"));
+                //menu.actions.push(new ContextualMenuAction("Undo Keep Target", this.removeTarget.bind(this), "fa fa-undo", "Undo: Prevents target item from being removed."));
+                //menu.actions.push(new ContextualMenuAction("Undo Keep Target & Children", this.removeTarget.bind(this), "fa fa-undo", "Undo: Prevents target item and its children from being removed"));
+            } else if (this.diffDetails.type == DiffType.Unmodified) {
+
+            }
+
+            if (this.diffDetails.type == DiffType.Add || this.diffDetails.type == DiffType.Remove) {
+                menu.actions.push(new ContextualMenuAction("Sync", this.sync.bind(this), "octicon octicon-git-pull-request", "Commit changes to item to target."));
+                menu.actions.push(new ContextualMenuAction("Sync With Children", this.syncWithChildren.bind(this), "octicon octicon-git-pull-request", "Commit changes to item and children to target."));
+            }
+
+            MessageBus.current.send("new-contextual-menu", this, menu);
+        }
+
+        exclude() {
+            this.syncExcluded(true);
+        }
+
+        merge() {
+        }
+
+        removeTarget() {
+        }
+
+        keepTarget() {
+        }
+
+        sync() {
+        }
+
+        syncWithChildren() {
         }
     }
 
@@ -87,9 +211,22 @@ module Tree {
     }
 
     export class ViewModel {
-
         root: Node;
+        viewer: Viewer = new Viewer();
+        navigation: Navigation = new Navigation();
+    }
 
+    export class Navigation {
+        contextualMenu: KnockoutObservable<ContextualMenu> = ko.observable(new ContextualMenu());
+
+        constructor() {
+            MessageBus.current.listen("new-contextual-menu", this.newMenu.bind(this));
+        }
+
+        newMenu(sender: any, data: any) {
+            var menu = <ContextualMenu> data;
+            this.contextualMenu(menu);
+        }
     }
 
     function populateNode(level: number, limit: number, index: number, childrenTotal: number): Node {
