@@ -53,7 +53,10 @@
     <Compile Include="CmsVisualizerRoute.cs" />
     <Compile Include="CmsVisualizerRouteHandler.cs" />
     <Compile Include="GetItemCommandHandler.cs" />
+    <Compile Include="HashUtil.cs" />
+    <Compile Include="HttpResponseExtensions.cs" />
     <Compile Include="ICommandHandler.cs" />
+    <Compile Include="ParameterKeys.cs" />
     <Compile Include="PreApplicationStart.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="UpdateItemCommandHandler.cs" />

@@ -1,24 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Security.Cryptography;
+using System.IO;
 using System.Web;
-using System.Web.Script.Serialization;
-using Sitecore.Collections;
 using Sitecore.Data;
-using Sitecore.Data.Fields;
 using Sitecore.Data.Items;
-using Sitecore.Data.Query;
 using Sitecore.Data.Serialization.ObjectModel;
 using Sitecore.SecurityModel;
 
 namespace ScSyncr.Agent
 {
-    internal static class ParameterKeys
-    {
-        internal static readonly string Db = "db";
-        internal static readonly string ItemId = "itemId";
-    }
-
     internal class GetItemCommandHandler : ICommandHandler
     {
         public void Handle(HttpContext context)
@@ -32,7 +22,7 @@ namespace ScSyncr.Agent
                 Item item = db.GetItem(new ID(id));
 
                 SyncItem seri = Sitecore.Data.Serialization.ItemSynchronization.BuildSyncItem(item);
-                context.Response.WriteJson(seri, true);
+                context.Response.WriteSyncItem(seri);
             }
         }
     }
@@ -60,26 +50,6 @@ namespace ScSyncr.Agent
         }
     }
 
-    internal static class HttpResponseExtensions
-    {
-        private static readonly JavaScriptSerializer Serializer = new JavaScriptSerializer();
-
-        public static void WriteJson(this HttpResponse response, object obj, bool includeHashHeader = false)
-        {
-            string content = Serializer.Serialize(obj);
-
-            if (includeHashHeader)
-            {
-                MD5 md5 = new MD5CryptoServiceProvider();
-                byte[] hash = md5.ComputeHash(System.Text.Encoding.UTF8.GetBytes(content));
-                response.Headers["X-Content-Hash"] = Convert.ToBase64String(hash);
-            }
-            
-            response.Write(content);
-            response.ContentType = "application/json";
-        }
-    }
-
     internal class TreeItemDto
     {
         public Guid Id { get; set; }
@@ -91,7 +61,8 @@ namespace ScSyncr.Agent
     internal class ItemDto
     {
         public SyncItem Item { get; set; }
-        public string Md5 { get; set; }
+        public string Raw { get; set; }
+        public string Hash { get; set; }
 
         //public Guid Id { get; set; }
         //public string Name { get; set; }

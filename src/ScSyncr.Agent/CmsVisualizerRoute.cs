@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Web.Routing;
+﻿using System.Web.Routing;
 
 namespace ScSyncr.Agent
 {
@@ -16,7 +11,7 @@ namespace ScSyncr.Agent
             get { return singleton; }
         }
 
-        private CmsVisualizerRoute() : base("cmsvis/{command}", new CmsVisualizerRouteHandler())
+        private CmsVisualizerRoute() : base("scsyncr/{command}", new CmsVisualizerRouteHandler())
         {
         }
     }

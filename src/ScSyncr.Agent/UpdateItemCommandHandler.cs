@@ -1,10 +1,13 @@
 ﻿using System;
+using System.IO;
 using System.Web;
 using System.Web.Script.Serialization;
+using Sitecore.Configuration;
+using Sitecore.Data.Items;
 using Sitecore.Data.Serialization;
 using Sitecore.Data.Serialization.ObjectModel;
+using Sitecore.SecurityModel;
 using Sitecore.WordOCX.Extensions;
-using Web.UI.XamlSharp.Xaml.Attributes;
 
 namespace ScSyncr.Agent
 {
@@ -20,13 +23,31 @@ namespace ScSyncr.Agent
                 return;
             }
 
+            string dbName = request.QueryString[ParameterKeys.Db];
+            var db = Factory.GetDatabase(dbName, assert: true);
+
             request.InputStream.Position = 0;//reset the stream so we can read the content
             byte[] rawBody = request.BinaryRead(request.ContentLength);
             string postBody = request.ContentEncoding.GetString(rawBody);
 
             JavaScriptSerializer serializer = new JavaScriptSerializer();
-            SyncItem item = serializer.Deserialize<SyncItem>(postBody);
-            ItemSynchronization.PasteSyncItem(item, new LoadOptions());
+            ItemDto itemDto = serializer.Deserialize<ItemDto>(postBody);
+
+            SyncItem syncItem;
+            using (TextReader reader = new StringReader(itemDto.Raw))
+            {
+                syncItem = SyncItem.ReadItem(new Tokenizer(reader));
+            }
+
+            Item item = null;
+            using (new SecurityDisabler())
+            {
+                ItemSynchronization.PasteSyncItem(syncItem, new LoadOptions {Database = db, ForceUpdate = true});
+                item = db.GetItem(syncItem.ID);
+            }
+
+            SyncItem outItem = ItemSynchronization.BuildSyncItem(item);
+            context.Response.WriteSyncItem(outItem);
         }
     }
 }
