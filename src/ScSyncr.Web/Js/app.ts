@@ -139,6 +139,17 @@ module Tree {
             }
         }
 
+        loadChildren() {
+            var mng = new RequestManager(3);
+            mng.add(() => {
+                return $.getJSON("", {}).done(this.loadChildrenSuccess.bind(this));
+            });
+        }
+
+        loadChildrenSuccess(data: Item) {
+            
+        }
+
         getDiffDetails(): DiffDetail {
             if (!this.source) {
                 return DiffDetail.remove;
@@ -210,10 +221,56 @@ module Tree {
         }
     }
 
+
+
+    class RequestManager {
+        private queue: Array<() => JQueryPromise<any>> = [];
+        private ongoingCount: number;
+        private maxConcurrentRequests: number;
+
+        constructor(maxConcurrentRequests: number) {
+            this.maxConcurrentRequests = maxConcurrentRequests;
+        }
+
+        add(request: () => JQueryPromise<any>) {
+            this.queue.unshift(request);
+            this.fireNext();
+        }
+
+        private fireNext() {
+            if (this.ongoingCount >= this.maxConcurrentRequests) {
+                return;
+            }
+
+            var request = this.queue.pop();
+            if (request) {
+                this.ongoingCount++;
+                try {
+                    request().always(() => {
+                        this.ongoingCount--;
+                        this.fireNext();
+                    });
+                } catch (e) {
+                    this.ongoingCount--;
+                } 
+            }
+        }
+    }
+
+    class ServiceLocator {
+        sourceRequestManager: RequestManager = new RequestManager(2);
+        targetRequestManager: RequestManager = new RequestManager(2);
+
+        sourceBaseUrl: string;
+        targetBaseUrl: string;
+    }
+
     export class ViewModel {
         root: Node;
         viewer: Viewer = new Viewer();
         navigation: Navigation = new Navigation();
+        sourceEndpoint: KnockoutObservable<string> = ko.observable<string>();
+        targetEndpoint: KnockoutObservable<string> = ko.observable<string>();
     }
 
     export class Navigation {
@@ -249,6 +306,8 @@ module Tree {
         var node = new Node(sourceItem, targetItem, children);
         return node;
     }
+
+    var serviceLocator = new ServiceLocator();
 
     (function () {
         var vm = new ViewModel();

@@ -132,6 +132,17 @@ var Tree;
             }
         };
 
+        Node.prototype.loadChildren = function () {
+            var _this = this;
+            var mng = new RequestManager(3);
+            mng.add(function () {
+                return $.getJSON("", {}).done(_this.loadChildrenSuccess.bind(_this));
+            });
+        };
+
+        Node.prototype.loadChildrenSuccess = function (data) {
+        };
+
         Node.prototype.getDiffDetails = function () {
             if (!this.source) {
                 return DiffDetail.remove;
@@ -201,10 +212,52 @@ var Tree;
     })();
     Tree.Item = Item;
 
+    var RequestManager = (function () {
+        function RequestManager(maxConcurrentRequests) {
+            this.queue = [];
+            this.maxConcurrentRequests = maxConcurrentRequests;
+        }
+        RequestManager.prototype.add = function (request) {
+            this.queue.unshift(request);
+            this.fireNext();
+        };
+
+        RequestManager.prototype.fireNext = function () {
+            var _this = this;
+            if (this.ongoingCount >= this.maxConcurrentRequests) {
+                return;
+            }
+
+            var request = this.queue.pop();
+            if (request) {
+                this.ongoingCount++;
+                try  {
+                    request().always(function () {
+                        _this.ongoingCount--;
+                        _this.fireNext();
+                    });
+                } catch (e) {
+                    this.ongoingCount--;
+                }
+            }
+        };
+        return RequestManager;
+    })();
+
+    var ServiceLocator = (function () {
+        function ServiceLocator() {
+            this.sourceRequestManager = new RequestManager(2);
+            this.targetRequestManager = new RequestManager(2);
+        }
+        return ServiceLocator;
+    })();
+
     var ViewModel = (function () {
         function ViewModel() {
             this.viewer = new Viewer();
             this.navigation = new Navigation();
+            this.sourceEndpoint = ko.observable();
+            this.targetEndpoint = ko.observable();
         }
         return ViewModel;
     })();
@@ -243,6 +296,8 @@ var Tree;
         var node = new Node(sourceItem, targetItem, children);
         return node;
     }
+
+    var serviceLocator = new ServiceLocator();
 
     (function () {
         var vm = new ViewModel();
