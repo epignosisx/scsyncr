@@ -140,10 +140,12 @@ module Tree {
         }
 
         loadChildren() {
-            var mng = new RequestManager(3);
-            mng.add(() => {
-                return $.getJSON("", {}).done(this.loadChildrenSuccess.bind(this));
-            });
+            var mgr = ServiceLocator.current.requestManager;
+
+            var srcPromise = mgr.add(() => $.getJSON("", {}));
+            var tgtPromise = mgr.add(() => $.getJSON("", {}));
+
+            $.when([srcPromise, tgtPromise]).done(this.loadChildrenSuccess.bind(this));
         }
 
         loadChildrenSuccess(data: Item) {
@@ -221,10 +223,8 @@ module Tree {
         }
     }
 
-
-
     class RequestManager {
-        private queue: Array<() => JQueryPromise<any>> = [];
+        private queue: Array<{ op: () => JQueryPromise<any>; promise: JQueryDeferred<any>; }> = [];
         private ongoingCount: number;
         private maxConcurrentRequests: number;
 
@@ -232,9 +232,11 @@ module Tree {
             this.maxConcurrentRequests = maxConcurrentRequests;
         }
 
-        add(request: () => JQueryPromise<any>) {
-            this.queue.unshift(request);
+        add(request: () => JQueryPromise<any>): JQueryPromise<any> {
+            var dfd = $.Deferred();
+            this.queue.unshift({op: request, promise: dfd });
             this.fireNext();
+            return dfd.promise();
         }
 
         private fireNext() {
@@ -245,24 +247,25 @@ module Tree {
             var request = this.queue.pop();
             if (request) {
                 this.ongoingCount++;
-                try {
-                    request().always(() => {
-                        this.ongoingCount--;
-                        this.fireNext();
-                    });
-                } catch (e) {
+                request.op().then((value: any) => {
                     this.ongoingCount--;
-                } 
+                    this.fireNext();
+                    request.promise.resolve(value);
+                }, (...args: any[]) => {
+                    this.ongoingCount--;
+                    this.fireNext();
+                    request.promise.reject(args);
+                }); 
             }
         }
     }
 
     class ServiceLocator {
-        sourceRequestManager: RequestManager = new RequestManager(2);
-        targetRequestManager: RequestManager = new RequestManager(2);
-
+        requestManager: RequestManager = new RequestManager(2);
         sourceBaseUrl: string;
         targetBaseUrl: string;
+
+        static current: ServiceLocator = new ServiceLocator();
     }
 
     export class ViewModel {

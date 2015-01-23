@@ -133,11 +133,16 @@ var Tree;
         };
 
         Node.prototype.loadChildren = function () {
-            var _this = this;
-            var mng = new RequestManager(3);
-            mng.add(function () {
-                return $.getJSON("", {}).done(_this.loadChildrenSuccess.bind(_this));
+            var mgr = ServiceLocator.current.requestManager;
+
+            var srcPromise = mgr.add(function () {
+                return $.getJSON("", {});
             });
+            var tgtPromise = mgr.add(function () {
+                return $.getJSON("", {});
+            });
+
+            $.when([srcPromise, tgtPromise]).done(this.loadChildrenSuccess.bind(this));
         };
 
         Node.prototype.loadChildrenSuccess = function (data) {
@@ -218,8 +223,10 @@ var Tree;
             this.maxConcurrentRequests = maxConcurrentRequests;
         }
         RequestManager.prototype.add = function (request) {
-            this.queue.unshift(request);
+            var dfd = $.Deferred();
+            this.queue.unshift({ op: request, promise: dfd });
             this.fireNext();
+            return dfd.promise();
         };
 
         RequestManager.prototype.fireNext = function () {
@@ -231,14 +238,19 @@ var Tree;
             var request = this.queue.pop();
             if (request) {
                 this.ongoingCount++;
-                try  {
-                    request().always(function () {
-                        _this.ongoingCount--;
-                        _this.fireNext();
-                    });
-                } catch (e) {
-                    this.ongoingCount--;
-                }
+                request.op().then(function (value) {
+                    _this.ongoingCount--;
+                    _this.fireNext();
+                    request.promise.resolve(value);
+                }, function () {
+                    var args = [];
+                    for (var _i = 0; _i < (arguments.length - 0); _i++) {
+                        args[_i] = arguments[_i + 0];
+                    }
+                    _this.ongoingCount--;
+                    _this.fireNext();
+                    request.promise.reject(args);
+                });
             }
         };
         return RequestManager;
@@ -246,9 +258,9 @@ var Tree;
 
     var ServiceLocator = (function () {
         function ServiceLocator() {
-            this.sourceRequestManager = new RequestManager(2);
-            this.targetRequestManager = new RequestManager(2);
+            this.requestManager = new RequestManager(2);
         }
+        ServiceLocator.current = new ServiceLocator();
         return ServiceLocator;
     })();
 
