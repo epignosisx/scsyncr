@@ -6,7 +6,7 @@ using System.Web.Routing;
 
 namespace ScSyncr.Agent
 {
-    public class CmsVisualizerHttpHandler : IHttpHandler
+    public class ScSyncrHttpHandler : IHttpHandler
     {
         private readonly static Dictionary<string, ICommandHandler> Routes = new Dictionary<string, ICommandHandler>(StringComparer.OrdinalIgnoreCase)
         {
@@ -17,7 +17,7 @@ namespace ScSyncr.Agent
 
         private readonly RequestContext _requestContext;
 
-        public CmsVisualizerHttpHandler(RequestContext requestContext)
+        public ScSyncrHttpHandler(RequestContext requestContext)
         {
             _requestContext = requestContext;
         }

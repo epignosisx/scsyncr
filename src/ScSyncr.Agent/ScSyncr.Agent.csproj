@@ -48,10 +48,10 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="CmsVisualizerHttpHandler.cs" />
-    <Compile Include="CmsVisualizerHttpModule.cs" />
-    <Compile Include="CmsVisualizerRoute.cs" />
-    <Compile Include="CmsVisualizerRouteHandler.cs" />
+    <Compile Include="ScSyncrHttpHandler.cs" />
+    <Compile Include="ScSyncrHttpModule.cs" />
+    <Compile Include="ScSyncrRoute.cs" />
+    <Compile Include="ScSyncrRouteHandler.cs" />
     <Compile Include="GetItemCommandHandler.cs" />
     <Compile Include="HashUtil.cs" />
     <Compile Include="HttpResponseExtensions.cs" />

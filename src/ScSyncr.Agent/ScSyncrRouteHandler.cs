@@ -3,11 +3,11 @@ using System.Web.Routing;
 
 namespace ScSyncr.Agent
 {
-    public class CmsVisualizerRouteHandler : IRouteHandler
+    public class ScSyncrRouteHandler : IRouteHandler
     {
         public IHttpHandler GetHttpHandler(RequestContext requestContext)
         {
-            return new CmsVisualizerHttpHandler(requestContext);
+            return new ScSyncrHttpHandler(requestContext);
         }
     }
 }
