@@ -48,12 +48,13 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="GetTreeItemCommandHandler.cs" />
     <Compile Include="ScSyncrHttpHandler.cs" />
     <Compile Include="ScSyncrHttpModule.cs" />
     <Compile Include="ScSyncrRoute.cs" />
     <Compile Include="ScSyncrRouteHandler.cs" />
     <Compile Include="GetItemCommandHandler.cs" />
-    <Compile Include="HashUtil.cs" />
+    <Compile Include="Utils.cs" />
     <Compile Include="HttpResponseExtensions.cs" />
     <Compile Include="ICommandHandler.cs" />
     <Compile Include="ParameterKeys.cs" />

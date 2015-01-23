@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Web;
 using Sitecore.Data;
 using Sitecore.Data.Items;
@@ -27,35 +26,13 @@ namespace ScSyncr.Agent
         }
     }
 
-    internal class GetTreeItemCommandHandler : ICommandHandler
-    {
-        public void Handle(HttpContext context)
-        {
-            string database = context.Request.QueryString[ParameterKeys.Db];
-            string id = context.Request.QueryString[ParameterKeys.ItemId];
-
-            using (new SecurityDisabler())
-            {
-                var db = Sitecore.Configuration.Factory.GetDatabase(database);
-                Item item = db.GetItem(new ID(id));
-
-                var dto = item.MapToTreeItemDto();
-                dto.Children = new List<TreeItemDto>();
-                foreach (Item child in item.GetChildren())
-                {
-                    dto.Children.Add(child.MapToTreeItemDto());
-                }
-                context.Response.WriteJson(dto);
-            }
-        }
-    }
-
     internal class TreeItemDto
     {
         public Guid Id { get; set; }
         public Guid ParentId { get; set; }
         public string Name { get; set; }
         public List<TreeItemDto> Children { get; set; }
+        public string Hash { get; set; }
     }
 
     internal class ItemDto
@@ -87,12 +64,13 @@ namespace ScSyncr.Agent
 
     internal static class ItemExtensions
     {
-        public static TreeItemDto MapToTreeItemDto(this Item item)
+        public static TreeItemDto MapToTreeItemDto(this Item item, string hash)
         {
             var dto = new TreeItemDto();
             dto.Id = item.ID.Guid;
             dto.Name = item.Name;
             dto.ParentId = item.ParentID.Guid;
+            dto.Hash = hash;
             return dto;
         }
 

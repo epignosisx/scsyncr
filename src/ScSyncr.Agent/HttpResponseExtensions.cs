@@ -10,17 +10,13 @@ namespace ScSyncr.Agent
     {
         public static void WriteSyncItem(this HttpResponse response, SyncItem syncItem)
         {
-            StringBuilder sb = new StringBuilder();
-            using (var writer = new StringWriter(sb))
-            {
-                syncItem.Serialize(writer);
-            }
-
+            StringBuilder sb = Utils.SerializeSyncItem(syncItem);
+            string value = sb.ToString();
             var dto = new ItemDto
             {
                 Item = syncItem,
-                Raw = sb.ToString(),
-                Hash = HashUtil.Md5Hash(sb.ToString())
+                Raw = value,
+                Hash = Utils.Md5Hash(value)
             };
 
             var jsSerializer = new JavaScriptSerializer();
@@ -30,16 +26,10 @@ namespace ScSyncr.Agent
             response.Write(content);
         }
 
-        public static void WriteJson(this HttpResponse response, object obj, bool includeHashHeader = false)
+        public static void WriteJson(this HttpResponse response, object obj)
         {
             var jsSerializer = new JavaScriptSerializer();
             string content = jsSerializer.Serialize(obj);
-
-            if (includeHashHeader)
-            {
-                response.Headers["X-Content-Hash"] = HashUtil.Md5Hash(content);
-            }
-
             response.ContentType = "application/json";
             response.Write(content);
         }

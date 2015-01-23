@@ -256,9 +256,24 @@ var Tree;
         return RequestManager;
     })();
 
+    var DataService = (function () {
+        function DataService() {
+        }
+        DataService.prototype.getTreeItem = function (itemId) {
+            return $.getJSON(this.baseUrl + "/scsyncr/get-tree-item", { itemId: itemId, db: this.db });
+        };
+
+        DataService.prototype.getItem = function (itemId) {
+            return $.getJSON(this.baseUrl + "/scsyncr/get-item", { itemId: itemId, db: this.db });
+        };
+        return DataService;
+    })();
+
     var ServiceLocator = (function () {
         function ServiceLocator() {
             this.requestManager = new RequestManager(2);
+            this.srcSrv = new DataService();
+            this.tgtSrv = new DataService();
         }
         ServiceLocator.current = new ServiceLocator();
         return ServiceLocator;
@@ -311,12 +326,48 @@ var Tree;
 
     var serviceLocator = new ServiceLocator();
 
-    (function () {
-        var vm = new ViewModel();
+    function parseQuerystring() {
+        var qs = window.location.search;
+        var obj = {};
+        if (qs.length) {
+            qs = qs.substring(1);
+            var vars = qs.split('&');
+            for (var i = 0; i < vars.length; i++) {
+                var pair = vars[i].split('=');
+                obj[decodeURIComponent(pair[0])] = decodeURIComponent(pair[1]);
+            }
+        }
+        return obj;
+    }
 
+    (function () {
+        var qs = parseQuerystring();
+        var sl = ServiceLocator.current;
+
+        sl.srcSrv.baseUrl = "http://" + qs.src + "/sitecore";
+        sl.srcSrv.db = qs.dbsrc;
+        sl.tgtSrv.baseUrl = "http://" + qs.tgt + "/sitecore";
+        sl.tgtSrv.db = qs.dbtgt;
+
+        var vm = new ViewModel();
+        vm.sourceEndpoint(qs.src);
+        vm.targetEndpoint(qs.tgt);
         vm.root = populateNode(0, 2, 1, 3);
 
         ko.applyBindings(vm);
+
+        var mgr = sl.requestManager;
+        var srcPromise = mgr.add(function () {
+            return sl.srcSrv.getItem("{11111111-1111-1111-1111-111111111111}");
+        });
+        var tgtPromise = mgr.add(function () {
+            return sl.tgtSrv.getItem("{11111111-1111-1111-1111-111111111111}");
+        });
+
+        $.when(srcPromise, tgtPromise).done(function (srcItem, tgtItem) {
+            console.log(srcItem, "source");
+            console.log(tgtItem, "target");
+        });
     })();
 })(Tree || (Tree = {}));
 //# sourceMappingURL=app.js.map

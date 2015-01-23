@@ -9,7 +9,7 @@ namespace ScSyncr.Agent
     {
         public static void Start()
         {
-            Microsoft.Web.Infrastructure.DynamicModuleHelper.DynamicModuleUtility.RegisterModule(typeof(CmsVisualizerHttpModule));
+            Microsoft.Web.Infrastructure.DynamicModuleHelper.DynamicModuleUtility.RegisterModule(typeof(ScSyncrHttpModule));
         }
     }
 }

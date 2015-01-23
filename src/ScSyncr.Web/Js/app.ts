@@ -260,14 +260,27 @@ module Tree {
         }
     }
 
+    class DataService {
+        baseUrl: string;
+        db: string;
+
+        getTreeItem(itemId: string): JQueryPromise<any> {
+            return $.getJSON(this.baseUrl + "/scsyncr/get-tree-item", { itemId: itemId, db: this.db });
+        }
+
+        getItem(itemId: string): JQueryPromise<any> {
+            return $.getJSON(this.baseUrl + "/scsyncr/get-item", { itemId: itemId, db: this.db });
+        }
+    }
+
     class ServiceLocator {
         requestManager: RequestManager = new RequestManager(2);
-        sourceBaseUrl: string;
-        targetBaseUrl: string;
+        srcSrv: DataService = new DataService();
+        tgtSrv: DataService = new DataService();
 
         static current: ServiceLocator = new ServiceLocator();
     }
-
+    
     export class ViewModel {
         root: Node;
         viewer: Viewer = new Viewer();
@@ -312,12 +325,46 @@ module Tree {
 
     var serviceLocator = new ServiceLocator();
 
-    (function () {
-        var vm = new ViewModel();
+    function parseQuerystring(): any {
+        var qs = window.location.search;
+        var obj: any = {};
+        if (qs.length) {
+            qs = qs.substring(1);
+            var vars = qs.split('&');
+            for (var i = 0; i < vars.length; i++) {
+                var pair = vars[i].split('=');
+                obj[decodeURIComponent(pair[0])] = decodeURIComponent(pair[1]);
+            }
+        }
+        return obj;
+    }
 
+
+
+    (function () {
+        var qs = parseQuerystring();
+        var sl = ServiceLocator.current;
+
+        sl.srcSrv.baseUrl = "http://" + qs.src + "/sitecore";
+        sl.srcSrv.db = qs.dbsrc;
+        sl.tgtSrv.baseUrl = "http://" + qs.tgt + "/sitecore";
+        sl.tgtSrv.db = qs.dbtgt;
+
+        var vm = new ViewModel();
+        vm.sourceEndpoint(qs.src);
+        vm.targetEndpoint(qs.tgt);
         vm.root = populateNode(0, 2, 1, 3);
 
         ko.applyBindings(vm);
+
+        var mgr = sl.requestManager;
+        var srcPromise = mgr.add(() => sl.srcSrv.getItem("{11111111-1111-1111-1111-111111111111}"));
+        var tgtPromise = mgr.add(() => sl.tgtSrv.getItem("{11111111-1111-1111-1111-111111111111}"));
+
+        $.when(srcPromise, tgtPromise).done((srcItem, tgtItem) => {
+            console.log(srcItem, "source");
+            console.log(tgtItem, "target");
+        });
     })();
 
 

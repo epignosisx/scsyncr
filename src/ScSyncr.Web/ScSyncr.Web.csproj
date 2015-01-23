@@ -89,6 +89,7 @@
     <Content Include="Content\font-awesome.css" />
     <Content Include="Content\font-awesome.min.css" />
     <Content Include="Content\index.html" />
+    <Content Include="Content\sync.html" />
     <Content Include="Content\octicons\octicons.css" />
     <Content Include="Global.asax" />
     <Content Include="fonts\glyphicons-halflings-regular.woff" />

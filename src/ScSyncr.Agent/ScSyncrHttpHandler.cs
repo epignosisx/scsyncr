@@ -24,26 +24,32 @@ namespace ScSyncr.Agent
         
         public void ProcessRequest(HttpContext context)
         {
-            string command = _requestContext.RouteData.Values["command"] as string;
-            
-            ICommandHandler handler;
-            if (command != null && Routes.TryGetValue(command, out handler))
+            try
             {
-                try
+                string command = _requestContext.RouteData.Values["command"] as string;
+                ICommandHandler handler;
+                if (command != null && Routes.TryGetValue(command, out handler))
                 {
-                    handler.Handle(context);
+                    try
+                    {
+                        handler.Handle(context);
+                    }
+                    catch (Exception ex)
+                    {
+                        context.Response.TrySkipIisCustomErrors = true;
+                        context.Response.StatusCode = 500;
+                        context.Response.Write(ex.ToString());
+                    }
                 }
-                catch (Exception ex)
+                else
                 {
-                    context.Response.TrySkipIisCustomErrors = true;
-                    context.Response.StatusCode = 500;
-                    context.Response.Write(ex.ToString());
+                    context.Response.StatusCode = 404;
+                    context.Response.Write("Unknown command");
                 }
             }
-            else
+            finally
             {
-                context.Response.StatusCode = 404;
-                context.Response.Write("Unknown command");
+                context.Response.Headers["Access-Control-Allow-Origin"] = "*";
             }
         }
 
