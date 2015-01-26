@@ -11,9 +11,11 @@
         .header-title {
             text-align:center;
         }
+
         .actions{
-            text-align:center;
+            margin-top:10px;
         }
+
         .actions button{
             padding-left: 35px;
             padding-right: 35px;
@@ -42,14 +44,6 @@
                             <div class="input-group-addon">/sitecore</div>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <select class="form-control" name="dbsrc">
-                            <option value="master">Master</option>
-                            <option value="web">Web</option>
-                            <option value="pub">Pub</option>
-                            <option value="core">Core</option>
-                        </select>
-                    </div>
                 </div>
                 <div class="col-sm-4">
                     <div class="form-group">
@@ -60,19 +54,23 @@
                             <div class="input-group-addon">/sitecore</div>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <select class="form-control" name="dbtgt">
-                            <option value="master">Master</option>
-                            <option value="web">Web</option>
-                            <option value="pub">Pub</option>
-                            <option value="core">Core</option>
-                        </select>
-                    </div>
                 </div>
                 <div class="col-sm-2"></div>
             </div>
 
-            <div class="row actions">
+            <div class="row">
+                <div class="col-sm-12 form-inline text-center">
+                    <label>Database</label>
+                    <select class="form-control" name="db">
+                        <option value="master">Master</option>
+                        <option value="web">Web</option>
+                        <option value="pub">Pub</option>
+                        <option value="core">Core</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="row actions text-center">
                 <button type="submit" class="btn btn-primary">Start</button>
             </div>
         </form>

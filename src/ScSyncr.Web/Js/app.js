@@ -259,12 +259,20 @@ var Tree;
     var DataService = (function () {
         function DataService() {
         }
+        DataService.prototype.setBaseUrl = function (baseUrl) {
+            baseUrl = baseUrl.replace("http://", "").replace("/sitecore", "");
+            if (baseUrl.charAt[baseUrl.length - 1] === "/") {
+                baseUrl = baseUrl.substring(baseUrl.length - 1, 1);
+            }
+            this.baseUrl = "http://" + baseUrl + "/scsyncr/";
+        };
+
         DataService.prototype.getTreeItem = function (itemId) {
-            return $.getJSON(this.baseUrl + "/scsyncr/get-tree-item", { itemId: itemId, db: this.db });
+            return $.getJSON(this.baseUrl + "get-tree-item", { itemId: itemId, db: this.db });
         };
 
         DataService.prototype.getItem = function (itemId) {
-            return $.getJSON(this.baseUrl + "/scsyncr/get-item", { itemId: itemId, db: this.db });
+            return $.getJSON(this.baseUrl + "get-item", { itemId: itemId, db: this.db });
         };
         return DataService;
     })();
@@ -344,10 +352,10 @@ var Tree;
         var qs = parseQuerystring();
         var sl = ServiceLocator.current;
 
-        sl.srcSrv.baseUrl = "http://" + qs.src + "/sitecore";
-        sl.srcSrv.db = qs.dbsrc;
-        sl.tgtSrv.baseUrl = "http://" + qs.tgt + "/sitecore";
-        sl.tgtSrv.db = qs.dbtgt;
+        sl.srcSrv.setBaseUrl(qs.src);
+        sl.srcSrv.db = qs.db;
+        sl.tgtSrv.setBaseUrl(qs.tgt);
+        sl.tgtSrv.db = qs.db;
 
         var vm = new ViewModel();
         vm.sourceEndpoint(qs.src);
@@ -358,10 +366,10 @@ var Tree;
 
         var mgr = sl.requestManager;
         var srcPromise = mgr.add(function () {
-            return sl.srcSrv.getItem("{11111111-1111-1111-1111-111111111111}");
+            return sl.srcSrv.getTreeItem("{11111111-1111-1111-1111-111111111111}");
         });
         var tgtPromise = mgr.add(function () {
-            return sl.tgtSrv.getItem("{11111111-1111-1111-1111-111111111111}");
+            return sl.tgtSrv.getTreeItem("{11111111-1111-1111-1111-111111111111}");
         });
 
         $.when(srcPromise, tgtPromise).done(function (srcItem, tgtItem) {
