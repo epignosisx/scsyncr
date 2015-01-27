@@ -88,7 +88,7 @@ var Tree;
             this.source = source ? new Item(source) : null;
             this.target = target ? new Item(target) : null;
 
-            this.processChildren(source.Children || [], target.Children || []);
+            this.processChildren(source ? source.Children : [], target ? target.Children : []);
 
             this.childrenLoaded(this.children().length > 0);
             this.expandClass = ko.computed(function () {
