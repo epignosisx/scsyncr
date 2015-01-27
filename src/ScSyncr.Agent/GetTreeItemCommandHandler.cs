@@ -3,6 +3,7 @@ using System.Text;
 using System.Web;
 using Sitecore.Data;
 using Sitecore.Data.Items;
+using Sitecore.Data.Proxies;
 using Sitecore.Data.Serialization;
 using Sitecore.Data.Serialization.ObjectModel;
 using Sitecore.SecurityModel;
@@ -16,6 +17,7 @@ namespace ScSyncr.Agent
             string database = context.Request.QueryString[ParameterKeys.Db];
             string id = context.Request.QueryString[ParameterKeys.ItemId];
 
+            using (new ProxyDisabler())
             using (new SecurityDisabler())
             {
                 var db = Sitecore.Configuration.Factory.GetDatabase(database);
