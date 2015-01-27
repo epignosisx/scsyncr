@@ -9,10 +9,6 @@
     <link href="octicons/octicons.css" rel="stylesheet" />
 
     <style type="text/css">
-        .container-full-width {
-          width: 100%;
-        }
-
         .container-body{
             margin-top:50px;
         }
@@ -29,6 +25,10 @@
             color:white;
         }
 
+        .content-tree-container {
+            overflow-x:auto;
+        }
+
         .content-tree{
             list-style:none;
             padding:0; 
@@ -41,7 +41,7 @@
         }
 
         .content-tree li{
-            
+            white-space: nowrap;
         }
 
         .content-tree a, .content-tree a:hover{
@@ -73,7 +73,6 @@
         .diff-icon.fa-plus-circle{
             color:blue;
         }
-
     </style>
 </head>
 <body>
@@ -91,7 +90,7 @@
 
     <div class="container container-full-width container-body">
         <div class="row">
-            <div class="col-xs-2">
+            <div class="col-xs-2 content-tree-container">
                 <h4>Content Tree</h4>
                 <ul class="content-tree">
                     <li data-bind="with: root">

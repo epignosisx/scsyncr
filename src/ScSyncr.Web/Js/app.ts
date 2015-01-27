@@ -95,12 +95,14 @@ module Tree {
             this.source = source ? new Item(source) : null;
             this.target = target ? new Item(target) : null;
 
-            this.processChildren(source ? source.Children : [], target ? target.Children : []);
+            this.processChildren(source ? source.Children : null, target ? target.Children : null);
 
             this.childrenLoaded(this.children().length > 0);
             this.expandClass = ko.computed(() => {
                 if (this.loadingChildren()) {
                     return "fa-spinner fa-spin";
+                } else if (this.childrenLoaded() && this.children().length == 0) {
+                    return "fa-square-o";
                 }
                 return this.expanded() ? "fa-minus-square-o" : "fa-plus-square-o";
             });
@@ -122,18 +124,34 @@ module Tree {
                 return;
             }
 
-            var i = 0, l = Math.max(srcChildren.length, tgtChildren.length);
-            for (; i < l; i++) {
-                if (i < srcChildren.length && i < tgtChildren.length) {
-                    this.children.push(new Node(srcChildren[i], tgtChildren[i]));
+            srcChildren = srcChildren || [];
+            tgtChildren = tgtChildren || [];
+
+            var srcIdx = 0,
+                srcLastMatched = 0,
+                tgtIdx = 0,
+                tgtLastMatched = 0,
+                srcLen = srcChildren.length,
+                tgtLen = tgtChildren.length,
+                src, tgt;
+
+            
+            for (; srcIdx < srcLen; srcIdx++) {
+                var found = false;
+                for (tgtIdx = tgtLastMatched; tgtIdx < tgtLen; tgtIdx++) {
+                    if (srcChildren[srcIdx].Id === tgtChildren[tgtIdx].Id) {
+                        while (tgtLastMatched < tgtIdx) {
+                            this.children.push(new Node(null, tgtChildren[tgtLastMatched++]));
+                        }
+                        this.children.push(new Node(srcChildren[srcIdx], tgtChildren[tgtIdx]));
+                        tgtLastMatched = tgtIdx + 1;
+                        found = true;
+                        break;
+                    }
                 }
 
-                if (i < srcChildren.length) {
-                    this.children.push(new Node(srcChildren[i], null));
-                }
-
-                if (i < tgtChildren.length) {
-                    this.children.push(new Node(tgtChildren[i], null));
+                if (!found) {
+                    this.children.push(new Node(srcChildren[srcIdx], null));    
                 }
             }
 
@@ -146,49 +164,40 @@ module Tree {
             } else if (this.childrenLoaded()) {
                 this.expanded(true);
             } else {
-                this.loadingChildren(true);
-                var mng = ServiceLocator.current.requestManager;
-                var srcSvc = ServiceLocator.current.srcSrv;
-                var tgtSvc = ServiceLocator.current.tgtSrv;
-
-                if (this.source && this.target) {
-                    var srcPromise = mng.add(() => srcSvc.getTreeItem(this.source.id));
-                    var tgtPromise = mng.add(() => srcSvc.getTreeItem(this.target.id));
-                    $.when(srcPromise, tgtPromise).done((source: ITreeItemDto, target: ITreeItemDto) => {
-                        this.processChildren(source.Children, target.Children);
-                    }).always(() => {
-                        this.loadingChildren(false);
-                        this.expanded(true);
-                    });
-                } else if (this.source) {
-                    mng.add(() => srcSvc.getTreeItem(this.source.id)).done((source) => {
-                        this.processChildren(source.Children, null);
-                    }).always(() => {
-                        this.loadingChildren(false);
-                        this.expanded(true);
-                    });;
-                } else if (this.target) {
-                    mng.add(() => tgtSvc.getTreeItem(this.target.id)).done((target) => {
-                        this.processChildren(null, target.Children);
-                    }).always(() => {
-                        this.loadingChildren(false);
-                        this.expanded(true);
-                    });;
-                }
+                this.loadChildren();
             }
         }
 
         loadChildren() {
-            var mgr = ServiceLocator.current.requestManager;
+            this.loadingChildren(true);
+            var mng = ServiceLocator.current.requestManager;
+            var srcSvc = ServiceLocator.current.srcSrv;
+            var tgtSvc = ServiceLocator.current.tgtSrv;
 
-            var srcPromise = mgr.add(() => $.getJSON("", {}));
-            var tgtPromise = mgr.add(() => $.getJSON("", {}));
-
-            $.when([srcPromise, tgtPromise]).done(this.loadChildrenSuccess.bind(this));
-        }
-
-        loadChildrenSuccess(data: Item) {
-            
+            if (this.source && this.target) {
+                var srcPromise = mng.add(() => srcSvc.getTreeItem(this.source.id));
+                var tgtPromise = mng.add(() => tgtSvc.getTreeItem(this.target.id));
+                $.when(srcPromise, tgtPromise).done((source: ITreeItemDto, target: ITreeItemDto) => {
+                    this.processChildren(source.Children, target.Children);
+                }).always(() => {
+                    this.loadingChildren(false);
+                    this.expanded(true);
+                });
+            } else if (this.source) {
+                mng.add(() => srcSvc.getTreeItem(this.source.id)).done((source) => {
+                    this.processChildren(source.Children, null);
+                }).always(() => {
+                    this.loadingChildren(false);
+                    this.expanded(true);
+                });;
+            } else if (this.target) {
+                mng.add(() => tgtSvc.getTreeItem(this.target.id)).done((target) => {
+                    this.processChildren(null, target.Children);
+                }).always(() => {
+                    this.loadingChildren(false);
+                    this.expanded(true);
+                });;
+            }
         }
 
         getDiffDetails(): DiffDetail {

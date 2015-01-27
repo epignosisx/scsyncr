@@ -88,12 +88,14 @@ var Tree;
             this.source = source ? new Item(source) : null;
             this.target = target ? new Item(target) : null;
 
-            this.processChildren(source ? source.Children : [], target ? target.Children : []);
+            this.processChildren(source ? source.Children : null, target ? target.Children : null);
 
             this.childrenLoaded(this.children().length > 0);
             this.expandClass = ko.computed(function () {
                 if (_this.loadingChildren()) {
                     return "fa-spinner fa-spin";
+                } else if (_this.childrenLoaded() && _this.children().length == 0) {
+                    return "fa-square-o";
                 }
                 return _this.expanded() ? "fa-minus-square-o" : "fa-plus-square-o";
             });
@@ -114,18 +116,27 @@ var Tree;
                 return;
             }
 
-            var i = 0, l = Math.max(srcChildren.length, tgtChildren.length);
-            for (; i < l; i++) {
-                if (i < srcChildren.length && i < tgtChildren.length) {
-                    this.children.push(new Node(srcChildren[i], tgtChildren[i]));
+            srcChildren = srcChildren || [];
+            tgtChildren = tgtChildren || [];
+
+            var srcIdx = 0, srcLastMatched = 0, tgtIdx = 0, tgtLastMatched = 0, srcLen = srcChildren.length, tgtLen = tgtChildren.length, src, tgt;
+
+            for (; srcIdx < srcLen; srcIdx++) {
+                var found = false;
+                for (tgtIdx = tgtLastMatched; tgtIdx < tgtLen; tgtIdx++) {
+                    if (srcChildren[srcIdx].Id === tgtChildren[tgtIdx].Id) {
+                        while (tgtLastMatched < tgtIdx) {
+                            this.children.push(new Node(null, tgtChildren[tgtLastMatched++]));
+                        }
+                        this.children.push(new Node(srcChildren[srcIdx], tgtChildren[tgtIdx]));
+                        tgtLastMatched = tgtIdx + 1;
+                        found = true;
+                        break;
+                    }
                 }
 
-                if (i < srcChildren.length) {
-                    this.children.push(new Node(srcChildren[i], null));
-                }
-
-                if (i < tgtChildren.length) {
-                    this.children.push(new Node(tgtChildren[i], null));
+                if (!found) {
+                    this.children.push(new Node(srcChildren[srcIdx], null));
                 }
             }
 
@@ -133,68 +144,56 @@ var Tree;
         };
 
         Node.prototype.toggleExpand = function () {
-            var _this = this;
             if (this.expanded()) {
                 this.expanded(false);
             } else if (this.childrenLoaded()) {
                 this.expanded(true);
             } else {
-                this.loadingChildren(true);
-                var mng = ServiceLocator.current.requestManager;
-                var srcSvc = ServiceLocator.current.srcSrv;
-                var tgtSvc = ServiceLocator.current.tgtSrv;
-
-                if (this.source && this.target) {
-                    var srcPromise = mng.add(function () {
-                        return srcSvc.getTreeItem(_this.source.id);
-                    });
-                    var tgtPromise = mng.add(function () {
-                        return srcSvc.getTreeItem(_this.target.id);
-                    });
-                    $.when(srcPromise, tgtPromise).done(function (source, target) {
-                        _this.processChildren(source.Children, target.Children);
-                    }).always(function () {
-                        _this.loadingChildren(false);
-                        _this.expanded(true);
-                    });
-                } else if (this.source) {
-                    mng.add(function () {
-                        return srcSvc.getTreeItem(_this.source.id);
-                    }).done(function (source) {
-                        _this.processChildren(source.Children, null);
-                    }).always(function () {
-                        _this.loadingChildren(false);
-                        _this.expanded(true);
-                    });
-                    ;
-                } else if (this.target) {
-                    mng.add(function () {
-                        return tgtSvc.getTreeItem(_this.target.id);
-                    }).done(function (target) {
-                        _this.processChildren(null, target.Children);
-                    }).always(function () {
-                        _this.loadingChildren(false);
-                        _this.expanded(true);
-                    });
-                    ;
-                }
+                this.loadChildren();
             }
         };
 
         Node.prototype.loadChildren = function () {
-            var mgr = ServiceLocator.current.requestManager;
+            var _this = this;
+            this.loadingChildren(true);
+            var mng = ServiceLocator.current.requestManager;
+            var srcSvc = ServiceLocator.current.srcSrv;
+            var tgtSvc = ServiceLocator.current.tgtSrv;
 
-            var srcPromise = mgr.add(function () {
-                return $.getJSON("", {});
-            });
-            var tgtPromise = mgr.add(function () {
-                return $.getJSON("", {});
-            });
-
-            $.when([srcPromise, tgtPromise]).done(this.loadChildrenSuccess.bind(this));
-        };
-
-        Node.prototype.loadChildrenSuccess = function (data) {
+            if (this.source && this.target) {
+                var srcPromise = mng.add(function () {
+                    return srcSvc.getTreeItem(_this.source.id);
+                });
+                var tgtPromise = mng.add(function () {
+                    return tgtSvc.getTreeItem(_this.target.id);
+                });
+                $.when(srcPromise, tgtPromise).done(function (source, target) {
+                    _this.processChildren(source.Children, target.Children);
+                }).always(function () {
+                    _this.loadingChildren(false);
+                    _this.expanded(true);
+                });
+            } else if (this.source) {
+                mng.add(function () {
+                    return srcSvc.getTreeItem(_this.source.id);
+                }).done(function (source) {
+                    _this.processChildren(source.Children, null);
+                }).always(function () {
+                    _this.loadingChildren(false);
+                    _this.expanded(true);
+                });
+                ;
+            } else if (this.target) {
+                mng.add(function () {
+                    return tgtSvc.getTreeItem(_this.target.id);
+                }).done(function (target) {
+                    _this.processChildren(null, target.Children);
+                }).always(function () {
+                    _this.loadingChildren(false);
+                    _this.expanded(true);
+                });
+                ;
+            }
         };
 
         Node.prototype.getDiffDetails = function () {
