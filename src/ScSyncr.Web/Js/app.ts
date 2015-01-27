@@ -52,12 +52,6 @@ module Tree {
         }
     }
 
-    export class ItemComparer {
-        compare(source: Item, target: Item) {
-            return source.field == target.field;
-        }
-    }
-
     export enum DiffType {
         Remove,
         Add,
@@ -97,10 +91,12 @@ module Tree {
         syncExcluded: KnockoutObservable<boolean> = ko.observable(false);
         name: KnockoutComputed<string>;
 
-        constructor(source: Item, target: Item, children: Node[]) {
-            this.source = source;
-            this.target = target;
-            this.children.push.apply(this.children, children);
+        constructor(source: ITreeItemDto, target: ITreeItemDto) {
+            this.source = source ? new Item(source) : null;
+            this.target = target ? new Item(target) : null;
+
+            this.processChildren(source.Children || [], target.Children || []);
+
             this.childrenLoaded(this.children().length > 0);
             this.expandClass = ko.computed(() => {
                 if (this.loadingChildren()) {
@@ -120,6 +116,30 @@ module Tree {
             });
         }
 
+        processChildren(srcChildren: ITreeItemDto[], tgtChildren: ITreeItemDto[]) {
+            if (!srcChildren && !tgtChildren) {
+                this.childrenLoaded(false);
+                return;
+            }
+
+            var i = 0, l = Math.max(srcChildren.length, tgtChildren.length);
+            for (; i < l; i++) {
+                if (i < srcChildren.length && i < tgtChildren.length) {
+                    this.children.push(new Node(srcChildren[i], tgtChildren[i]));
+                }
+
+                if (i < srcChildren.length) {
+                    this.children.push(new Node(srcChildren[i], null));
+                }
+
+                if (i < tgtChildren.length) {
+                    this.children.push(new Node(tgtChildren[i], null));
+                }
+            }
+
+            this.childrenLoaded(true);
+        }
+
         toggleExpand() {
             if (this.expanded()) {
                 this.expanded(false);
@@ -127,15 +147,34 @@ module Tree {
                 this.expanded(true);
             } else {
                 this.loadingChildren(true);
-                setTimeout(() => {
-                    this.children.push(
-                        populateNode(0, 1, 1, 3),
-                        populateNode(0, 1, 1, 3),
-                        populateNode(0, 1, 1, 3)
-                    );
-                    this.loadingChildren(false);
-                    this.expanded(true);
-                }, 2000);
+                var mng = ServiceLocator.current.requestManager;
+                var srcSvc = ServiceLocator.current.srcSrv;
+                var tgtSvc = ServiceLocator.current.tgtSrv;
+
+                if (this.source && this.target) {
+                    var srcPromise = mng.add(() => srcSvc.getTreeItem(this.source.id));
+                    var tgtPromise = mng.add(() => srcSvc.getTreeItem(this.target.id));
+                    $.when(srcPromise, tgtPromise).done((source: ITreeItemDto, target: ITreeItemDto) => {
+                        this.processChildren(source.Children, target.Children);
+                    }).always(() => {
+                        this.loadingChildren(false);
+                        this.expanded(true);
+                    });
+                } else if (this.source) {
+                    mng.add(() => srcSvc.getTreeItem(this.source.id)).done((source) => {
+                        this.processChildren(source.Children, null);
+                    }).always(() => {
+                        this.loadingChildren(false);
+                        this.expanded(true);
+                    });;
+                } else if (this.target) {
+                    mng.add(() => tgtSvc.getTreeItem(this.target.id)).done((target) => {
+                        this.processChildren(null, target.Children);
+                    }).always(() => {
+                        this.loadingChildren(false);
+                        this.expanded(true);
+                    });;
+                }
             }
         }
 
@@ -157,13 +196,10 @@ module Tree {
                 return DiffDetail.remove;
             } else if (!this.target) {
                 return DiffDetail.add;
-            } else {
-                var comparer = new ItemComparer();
-                if (comparer.compare(this.source, this.target)) {
-                    return DiffDetail.unmodified;
-                }
-                return DiffDetail.modified;
+            } else if(this.source.hash == this.target.hash) {
+                return DiffDetail.unmodified;
             }
+            return DiffDetail.modified;
         }
 
         showDetails() {
@@ -214,12 +250,14 @@ module Tree {
     export class Item {
         id: string;
         name: string;
+        parentId: string;
+        hash: string;
 
-        field: string;
-
-        constructor(data: { id: string; name: string }) {
-            this.id = data.id;
-            this.name = data.name;
+        constructor(data: ITreeItemDto) {
+            this.id = data.Id;
+            this.name = data.Name;
+            this.parentId = data.ParentId;
+            this.hash = data.Hash;
         }
     }
 
@@ -288,9 +326,9 @@ module Tree {
 
         static current: ServiceLocator = new ServiceLocator();
     }
-    
+
     export class ViewModel {
-        root: Node;
+        root: KnockoutObservable<Node> = ko.observable<Node>();
         viewer: Viewer = new Viewer();
         navigation: Navigation = new Navigation();
         sourceEndpoint: KnockoutObservable<string> = ko.observable<string>();
@@ -310,28 +348,34 @@ module Tree {
         }
     }
 
-    function populateNode(level: number, limit: number, index: number, childrenTotal: number): Node {
-        var sourceItem = Math.random() < 0.5 ? null : new Item({ id: level.toString(), name: "Node " + level + "." + index });
-        var targetItem = Math.random() < 0.5 && sourceItem != null ? null : new Item({ id: level.toString(), name: "Node " + level + "." + index });
-        if (sourceItem) {
-            sourceItem.field = Math.random() < 0.5 ? "1" : "2";
-        }
-        if (targetItem) {
-            targetItem.field = Math.random() < 0.5 ? "1" : "2";
-        }
-        var children: Node[] = [];
-
-        if (level < limit) {
-            for (var i = 0; i < childrenTotal; i++) {
-                children.push(populateNode(level + 1, limit, i + 1, childrenTotal));
-            }
-        }
-
-        var node = new Node(sourceItem, targetItem, children);
-        return node;
+    export interface ITreeItemDto {
+        Id: string;
+        ParentId: string;
+        Name: string;
+        Children: ITreeItemDto[];
+        Hash: string;
     }
 
-    var serviceLocator = new ServiceLocator();
+    //function populateNode(level: number, limit: number, index: number, childrenTotal: number): Node {
+    //    var sourceItem = Math.random() < 0.5 ? null : new Item({ id: level.toString(), name: "Node " + level + "." + index });
+    //    var targetItem = Math.random() < 0.5 && sourceItem != null ? null : new Item({ id: level.toString(), name: "Node " + level + "." + index });
+    //    if (sourceItem) {
+    //        sourceItem.field = Math.random() < 0.5 ? "1" : "2";
+    //    }
+    //    if (targetItem) {
+    //        targetItem.field = Math.random() < 0.5 ? "1" : "2";
+    //    }
+    //    var children: Node[] = [];
+
+    //    if (level < limit) {
+    //        for (var i = 0; i < childrenTotal; i++) {
+    //            children.push(populateNode(level + 1, limit, i + 1, childrenTotal));
+    //        }
+    //    }
+
+    //    var node = new Node(sourceItem, targetItem, children);
+    //    return node;
+    //}
 
     function parseQuerystring(): any {
         var qs = window.location.search;
@@ -349,7 +393,7 @@ module Tree {
 
 
 
-    (function () {
+    (() => {
         var qs = parseQuerystring();
         var sl = ServiceLocator.current;
 
@@ -361,7 +405,6 @@ module Tree {
         var vm = new ViewModel();
         vm.sourceEndpoint(qs.src);
         vm.targetEndpoint(qs.tgt);
-        vm.root = populateNode(0, 2, 1, 3);
 
         ko.applyBindings(vm);
 
@@ -369,11 +412,8 @@ module Tree {
         var srcPromise = mgr.add(() => sl.srcSrv.getTreeItem("{11111111-1111-1111-1111-111111111111}"));
         var tgtPromise = mgr.add(() => sl.tgtSrv.getTreeItem("{11111111-1111-1111-1111-111111111111}"));
 
-        $.when(srcPromise, tgtPromise).done((srcItem, tgtItem) => {
-            console.log(srcItem, "source");
-            console.log(tgtItem, "target");
+        $.when(srcPromise, tgtPromise).done((srcItem: ITreeItemDto, tgtItem: ITreeItemDto) => {
+            vm.root(new Node(srcItem, tgtItem));
         });
     })();
-
-
 }

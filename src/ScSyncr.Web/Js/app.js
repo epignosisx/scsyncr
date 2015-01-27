@@ -55,16 +55,6 @@ var Tree;
     })();
     Tree.Viewer = Viewer;
 
-    var ItemComparer = (function () {
-        function ItemComparer() {
-        }
-        ItemComparer.prototype.compare = function (source, target) {
-            return source.field == target.field;
-        };
-        return ItemComparer;
-    })();
-    Tree.ItemComparer = ItemComparer;
-
     (function (DiffType) {
         DiffType[DiffType["Remove"] = 0] = "Remove";
         DiffType[DiffType["Add"] = 1] = "Add";
@@ -88,16 +78,18 @@ var Tree;
     Tree.DiffDetail = DiffDetail;
 
     var Node = (function () {
-        function Node(source, target, children) {
+        function Node(source, target) {
             var _this = this;
             this.children = ko.observableArray([]);
             this.childrenLoaded = ko.observable(false);
             this.expanded = ko.observable(false);
             this.loadingChildren = ko.observable(false);
             this.syncExcluded = ko.observable(false);
-            this.source = source;
-            this.target = target;
-            this.children.push.apply(this.children, children);
+            this.source = source ? new Item(source) : null;
+            this.target = target ? new Item(target) : null;
+
+            this.processChildren(source.Children || [], target.Children || []);
+
             this.childrenLoaded(this.children().length > 0);
             this.expandClass = ko.computed(function () {
                 if (_this.loadingChildren()) {
@@ -116,6 +108,30 @@ var Tree;
                 return _this.syncExcluded() ? "Excluded: " + _this.diffDetails.title : _this.diffDetails.title;
             });
         }
+        Node.prototype.processChildren = function (srcChildren, tgtChildren) {
+            if (!srcChildren && !tgtChildren) {
+                this.childrenLoaded(false);
+                return;
+            }
+
+            var i = 0, l = Math.max(srcChildren.length, tgtChildren.length);
+            for (; i < l; i++) {
+                if (i < srcChildren.length && i < tgtChildren.length) {
+                    this.children.push(new Node(srcChildren[i], tgtChildren[i]));
+                }
+
+                if (i < srcChildren.length) {
+                    this.children.push(new Node(srcChildren[i], null));
+                }
+
+                if (i < tgtChildren.length) {
+                    this.children.push(new Node(tgtChildren[i], null));
+                }
+            }
+
+            this.childrenLoaded(true);
+        };
+
         Node.prototype.toggleExpand = function () {
             var _this = this;
             if (this.expanded()) {
@@ -124,11 +140,44 @@ var Tree;
                 this.expanded(true);
             } else {
                 this.loadingChildren(true);
-                setTimeout(function () {
-                    _this.children.push(populateNode(0, 1, 1, 3), populateNode(0, 1, 1, 3), populateNode(0, 1, 1, 3));
-                    _this.loadingChildren(false);
-                    _this.expanded(true);
-                }, 2000);
+                var mng = ServiceLocator.current.requestManager;
+                var srcSvc = ServiceLocator.current.srcSrv;
+                var tgtSvc = ServiceLocator.current.tgtSrv;
+
+                if (this.source && this.target) {
+                    var srcPromise = mng.add(function () {
+                        return srcSvc.getTreeItem(_this.source.id);
+                    });
+                    var tgtPromise = mng.add(function () {
+                        return srcSvc.getTreeItem(_this.target.id);
+                    });
+                    $.when(srcPromise, tgtPromise).done(function (source, target) {
+                        _this.processChildren(source.Children, target.Children);
+                    }).always(function () {
+                        _this.loadingChildren(false);
+                        _this.expanded(true);
+                    });
+                } else if (this.source) {
+                    mng.add(function () {
+                        return srcSvc.getTreeItem(_this.source.id);
+                    }).done(function (source) {
+                        _this.processChildren(source.Children, null);
+                    }).always(function () {
+                        _this.loadingChildren(false);
+                        _this.expanded(true);
+                    });
+                    ;
+                } else if (this.target) {
+                    mng.add(function () {
+                        return tgtSvc.getTreeItem(_this.target.id);
+                    }).done(function (target) {
+                        _this.processChildren(null, target.Children);
+                    }).always(function () {
+                        _this.loadingChildren(false);
+                        _this.expanded(true);
+                    });
+                    ;
+                }
             }
         };
 
@@ -153,13 +202,10 @@ var Tree;
                 return DiffDetail.remove;
             } else if (!this.target) {
                 return DiffDetail.add;
-            } else {
-                var comparer = new ItemComparer();
-                if (comparer.compare(this.source, this.target)) {
-                    return DiffDetail.unmodified;
-                }
-                return DiffDetail.modified;
+            } else if (this.source.hash == this.target.hash) {
+                return DiffDetail.unmodified;
             }
+            return DiffDetail.modified;
         };
 
         Node.prototype.showDetails = function () {
@@ -210,8 +256,10 @@ var Tree;
 
     var Item = (function () {
         function Item(data) {
-            this.id = data.id;
-            this.name = data.name;
+            this.id = data.Id;
+            this.name = data.Name;
+            this.parentId = data.ParentId;
+            this.hash = data.Hash;
         }
         return Item;
     })();
@@ -289,6 +337,7 @@ var Tree;
 
     var ViewModel = (function () {
         function ViewModel() {
+            this.root = ko.observable();
             this.viewer = new Viewer();
             this.navigation = new Navigation();
             this.sourceEndpoint = ko.observable();
@@ -311,29 +360,24 @@ var Tree;
     })();
     Tree.Navigation = Navigation;
 
-    function populateNode(level, limit, index, childrenTotal) {
-        var sourceItem = Math.random() < 0.5 ? null : new Item({ id: level.toString(), name: "Node " + level + "." + index });
-        var targetItem = Math.random() < 0.5 && sourceItem != null ? null : new Item({ id: level.toString(), name: "Node " + level + "." + index });
-        if (sourceItem) {
-            sourceItem.field = Math.random() < 0.5 ? "1" : "2";
-        }
-        if (targetItem) {
-            targetItem.field = Math.random() < 0.5 ? "1" : "2";
-        }
-        var children = [];
-
-        if (level < limit) {
-            for (var i = 0; i < childrenTotal; i++) {
-                children.push(populateNode(level + 1, limit, i + 1, childrenTotal));
-            }
-        }
-
-        var node = new Node(sourceItem, targetItem, children);
-        return node;
-    }
-
-    var serviceLocator = new ServiceLocator();
-
+    //function populateNode(level: number, limit: number, index: number, childrenTotal: number): Node {
+    //    var sourceItem = Math.random() < 0.5 ? null : new Item({ id: level.toString(), name: "Node " + level + "." + index });
+    //    var targetItem = Math.random() < 0.5 && sourceItem != null ? null : new Item({ id: level.toString(), name: "Node " + level + "." + index });
+    //    if (sourceItem) {
+    //        sourceItem.field = Math.random() < 0.5 ? "1" : "2";
+    //    }
+    //    if (targetItem) {
+    //        targetItem.field = Math.random() < 0.5 ? "1" : "2";
+    //    }
+    //    var children: Node[] = [];
+    //    if (level < limit) {
+    //        for (var i = 0; i < childrenTotal; i++) {
+    //            children.push(populateNode(level + 1, limit, i + 1, childrenTotal));
+    //        }
+    //    }
+    //    var node = new Node(sourceItem, targetItem, children);
+    //    return node;
+    //}
     function parseQuerystring() {
         var qs = window.location.search;
         var obj = {};
@@ -360,7 +404,6 @@ var Tree;
         var vm = new ViewModel();
         vm.sourceEndpoint(qs.src);
         vm.targetEndpoint(qs.tgt);
-        vm.root = populateNode(0, 2, 1, 3);
 
         ko.applyBindings(vm);
 
@@ -373,8 +416,7 @@ var Tree;
         });
 
         $.when(srcPromise, tgtPromise).done(function (srcItem, tgtItem) {
-            console.log(srcItem, "source");
-            console.log(tgtItem, "target");
+            vm.root(new Node(srcItem, tgtItem));
         });
     })();
 })(Tree || (Tree = {}));
