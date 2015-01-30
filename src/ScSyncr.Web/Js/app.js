@@ -1,4 +1,5 @@
 ﻿/// <reference path="../scripts/typings/knockout/knockout.d.ts" />
+
 var Tree;
 (function (Tree) {
     var MessageBus = (function () {
@@ -50,6 +51,16 @@ var Tree;
         Viewer.prototype.show = function (source, target) {
             this.source(source);
             this.target(target);
+
+            $("#compare").mergely({
+                cmsettings: { readOnly: false },
+                lhs: function (setValue) {
+                    setValue(source.name);
+                },
+                rhs: function (setValue) {
+                    setValue(source.name);
+                }
+            });
         };
         return Viewer;
     })();
@@ -229,6 +240,8 @@ var Tree;
             }
 
             MessageBus.current.send("new-contextual-menu", this, menu);
+
+            ServiceLocator.current.viewer.show(this.source, this.target);
         };
 
         Node.prototype.exclude = function () {
@@ -324,11 +337,37 @@ var Tree;
         return DataService;
     })();
 
+    var DataServiceMocked = (function () {
+        function DataServiceMocked() {
+        }
+        DataServiceMocked.prototype.setBaseUrl = function (baseUrl) {
+        };
+
+        DataServiceMocked.prototype.getTreeItem = function (itemId) {
+            var dfd = $.Deferred();
+
+            setTimeout(function () {
+                dfd.resolve(mockItem(itemId, true, true));
+            }, 1000);
+
+            return dfd.promise();
+        };
+
+        DataServiceMocked.prototype.getItem = function (itemId) {
+            var dfd = $.Deferred();
+            return dfd.promise();
+        };
+        return DataServiceMocked;
+    })();
+
     var ServiceLocator = (function () {
         function ServiceLocator() {
+            this.viewer = new Viewer();
             this.requestManager = new RequestManager(2);
-            this.srcSrv = new DataService();
-            this.tgtSrv = new DataService();
+            //srcSrv: IDataService = new DataService();
+            //tgtSrv: IDataService = new DataService();
+            this.srcSrv = new DataServiceMocked();
+            this.tgtSrv = new DataServiceMocked();
         }
         ServiceLocator.current = new ServiceLocator();
         return ServiceLocator;
@@ -359,24 +398,23 @@ var Tree;
     })();
     Tree.Navigation = Navigation;
 
-    //function populateNode(level: number, limit: number, index: number, childrenTotal: number): Node {
-    //    var sourceItem = Math.random() < 0.5 ? null : new Item({ id: level.toString(), name: "Node " + level + "." + index });
-    //    var targetItem = Math.random() < 0.5 && sourceItem != null ? null : new Item({ id: level.toString(), name: "Node " + level + "." + index });
-    //    if (sourceItem) {
-    //        sourceItem.field = Math.random() < 0.5 ? "1" : "2";
-    //    }
-    //    if (targetItem) {
-    //        targetItem.field = Math.random() < 0.5 ? "1" : "2";
-    //    }
-    //    var children: Node[] = [];
-    //    if (level < limit) {
-    //        for (var i = 0; i < childrenTotal; i++) {
-    //            children.push(populateNode(level + 1, limit, i + 1, childrenTotal));
-    //        }
-    //    }
-    //    var node = new Node(sourceItem, targetItem, children);
-    //    return node;
-    //}
+    function mockItem(currentId, mustExist, addChildren) {
+        var shouldExist = Math.random() < 0.5;
+        if (!shouldExist && !mustExist) {
+            return null;
+        }
+
+        var treeDto = { Id: currentId.substring(0, 3) + "1", Name: "Node " + currentId + "1", ParentId: currentId, Hash: null, Children: null };
+        if (addChildren) {
+            treeDto.Children = [];
+            for (var i = 0; i < 3; i++) {
+                var child = mockItem(treeDto.Id, true, false);
+                treeDto.Children.push(child);
+            }
+        }
+        return treeDto;
+    }
+
     function parseQuerystring() {
         var qs = window.location.search;
         var obj = {};

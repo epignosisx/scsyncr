@@ -7,6 +7,8 @@
     <link href="bootstrap-theme.min.css" rel="stylesheet" />
     <link href="font-awesome.min.css" rel="stylesheet" />
     <link href="octicons/octicons.css" rel="stylesheet" />
+    <link href="mergely/codemirror.css" rel="stylesheet" />
+    <link href="mergely/mergely.css" rel="stylesheet" />
 
     <style type="text/css">
         .container-body{
@@ -25,14 +27,20 @@
             color:white;
         }
 
+        .content-diff-viewer {
+            min-height: 500px;
+        }
+
         .content-tree-container {
             overflow-x:auto;
+            min-height: 500px;
         }
 
         .content-tree{
             list-style:none;
             padding:0; 
-            margin:0;   
+            margin:0;
+            font-size: 12px;
         }
 
         .content-tree ul{
@@ -90,6 +98,15 @@
 
     <div class="container container-full-width container-body">
         <div class="row">
+            <div class="col-xs-2"></div>
+            <div class="col-xs-5">
+                <h4>Source <small data-bind="text: sourceEndpoint"></small></h4>
+            </div>
+            <div class="col-xs-5">
+                <h4>Target <small data-bind="text: targetEndpoint"></small></h4>
+            </div>
+        </div>
+        <div class="row">
             <div class="col-xs-2 content-tree-container">
                 <h4>Content Tree</h4>
                 <ul class="content-tree">
@@ -101,11 +118,8 @@
                     </li>
                 </ul>
             </div>
-            <div class="col-xs-5">
-                <h4>Source <small data-bind="text: sourceEndpoint"></small></h4>
-            </div>
-            <div class="col-xs-5">
-                <h4>Target <small data-bind="text: targetEndpoint"></small></h4>
+            <div class="col-xs-10 content-diff-viewer">
+                <div id="compare"></div>
             </div>
         </div>
     </div>
@@ -121,6 +135,8 @@
 
     <script src="../Scripts/jquery-2.1.3.min.js"></script>
     <script src="../Scripts/knockout-3.2.0.debug.js"></script>
+    <script src="mergely/codemirror.js"></script>
+    <script src="mergely/mergely.js"></script>
     <script src="../Js/app.js"></script>
 </body>
 </html>

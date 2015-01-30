@@ -1,5 +1,9 @@
 ﻿/// <reference path="../scripts/typings/knockout/knockout.d.ts" />
 
+interface JQuery {
+    mergely(opts: any): JQuery;
+}
+
 module Tree {
 
     export class MessageBus {
@@ -49,6 +53,16 @@ module Tree {
         show(source: Item, target: Item) {
             this.source(source);
             this.target(target);
+
+            $("#compare").mergely({
+                cmsettings: { readOnly: false },
+                lhs: function(setValue) {
+                    setValue(source.name);
+                },
+                rhs: function (setValue) {
+                    setValue(source.name);
+                }
+            });
         }
     }
 
@@ -234,6 +248,8 @@ module Tree {
             }
 
             MessageBus.current.send("new-contextual-menu", this, menu);
+
+            ServiceLocator.current.viewer.show(this.source, this.target);
         }
 
         exclude() {
@@ -307,8 +323,15 @@ module Tree {
         }
     }
 
-    class DataService {
-       private baseUrl: string;
+    interface IDataService {
+        db: string;
+        setBaseUrl(baseUrl: string);
+        getTreeItem(itemId: string): JQueryPromise<ITreeItemDto>;
+        getItem(itemId: string): JQueryPromise<any>;
+    }
+
+    class DataService implements  IDataService {
+        private baseUrl: string;
         db: string;
 
         setBaseUrl(baseUrl: string) {
@@ -319,7 +342,7 @@ module Tree {
             this.baseUrl = "http://" + baseUrl + "/scsyncr/";
         }
 
-        getTreeItem(itemId: string): JQueryPromise<any> {
+        getTreeItem(itemId: string): JQueryPromise<ITreeItemDto> {
             return $.getJSON(this.baseUrl + "get-tree-item", { itemId: itemId, db: this.db });
         }
 
@@ -328,10 +351,37 @@ module Tree {
         }
     }
 
+    class DataServiceMocked implements IDataService {
+        db: string;
+
+        setBaseUrl(baseUrl: string) {
+            
+        }
+
+        getTreeItem(itemId: string): JQueryPromise<ITreeItemDto> {
+            var dfd = $.Deferred();
+
+            setTimeout(() => {
+                dfd.resolve(mockItem(itemId, true, true));
+            }, 1000);
+
+            return dfd.promise();
+        }
+
+        getItem(itemId: string): JQueryPromise<any> {
+            var dfd = $.Deferred();
+            return dfd.promise();
+        }
+    }
+
     class ServiceLocator {
+        viewer: Viewer = new Viewer();
         requestManager: RequestManager = new RequestManager(2);
-        srcSrv: DataService = new DataService();
-        tgtSrv: DataService = new DataService();
+        //srcSrv: IDataService = new DataService();
+        //tgtSrv: IDataService = new DataService();
+
+        srcSrv: IDataService = new DataServiceMocked();
+        tgtSrv: IDataService = new DataServiceMocked();
 
         static current: ServiceLocator = new ServiceLocator();
     }
@@ -365,26 +415,22 @@ module Tree {
         Hash: string;
     }
 
-    //function populateNode(level: number, limit: number, index: number, childrenTotal: number): Node {
-    //    var sourceItem = Math.random() < 0.5 ? null : new Item({ id: level.toString(), name: "Node " + level + "." + index });
-    //    var targetItem = Math.random() < 0.5 && sourceItem != null ? null : new Item({ id: level.toString(), name: "Node " + level + "." + index });
-    //    if (sourceItem) {
-    //        sourceItem.field = Math.random() < 0.5 ? "1" : "2";
-    //    }
-    //    if (targetItem) {
-    //        targetItem.field = Math.random() < 0.5 ? "1" : "2";
-    //    }
-    //    var children: Node[] = [];
+    function mockItem(currentId: string, mustExist: boolean, addChildren: boolean): ITreeItemDto {
+        var shouldExist = Math.random() < 0.5;
+        if (!shouldExist && !mustExist) {
+            return null;
+        }
 
-    //    if (level < limit) {
-    //        for (var i = 0; i < childrenTotal; i++) {
-    //            children.push(populateNode(level + 1, limit, i + 1, childrenTotal));
-    //        }
-    //    }
-
-    //    var node = new Node(sourceItem, targetItem, children);
-    //    return node;
-    //}
+        var treeDto = { Id: currentId.substring(0, 3) + "1", Name: "Node " + currentId + "1", ParentId: currentId, Hash: null, Children: null };
+        if (addChildren) {
+            treeDto.Children = [];
+            for (var i = 0; i < 3; i++) {
+                var child = mockItem(treeDto.Id, true, false);
+                treeDto.Children.push(child);
+            }
+        }
+        return treeDto;
+    }
 
     function parseQuerystring(): any {
         var qs = window.location.search;
