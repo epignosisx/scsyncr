@@ -399,7 +399,7 @@ var Tree;
             var dfd = $.Deferred();
 
             setTimeout(function () {
-                dfd.resolve(mockItem(itemId, true, true));
+                dfd.resolve(mockTreeItem(itemId, true, true));
             }, 1000);
 
             return dfd.promise();
@@ -407,6 +407,11 @@ var Tree;
 
         DataServiceMocked.prototype.getItem = function (itemId) {
             var dfd = $.Deferred();
+
+            setTimeout(function () {
+                dfd.resolve(mockItem(itemId));
+            }, 1000);
+
             return dfd.promise();
         };
         return DataServiceMocked;
@@ -416,8 +421,10 @@ var Tree;
         function ServiceLocator() {
             this.viewer = new Viewer();
             this.requestManager = new RequestManager(2);
-            this.srcSvc = new DataService();
-            this.tgtSvc = new DataService();
+            //srcSvc: IDataService = new DataService();
+            //tgtSvc: IDataService = new DataService();
+            this.srcSvc = new DataServiceMocked();
+            this.tgtSvc = new DataServiceMocked();
         }
         ServiceLocator.current = new ServiceLocator();
         return ServiceLocator;
@@ -448,7 +455,12 @@ var Tree;
     })();
     Tree.Navigation = Navigation;
 
-    function mockItem(currentId, mustExist, addChildren) {
+    function mockItem(currentId) {
+        var t = (Math.random() < 0.5 ? "1111" : "0000");
+        return { Item: null, Hash: t, Raw: t };
+    }
+
+    function mockTreeItem(currentId, mustExist, addChildren) {
         var shouldExist = Math.random() < 0.5;
         if (!shouldExist && !mustExist) {
             return null;
@@ -458,7 +470,7 @@ var Tree;
         if (addChildren) {
             treeDto.Children = [];
             for (var i = 0; i < 3; i++) {
-                var child = mockItem(treeDto.Id, true, false);
+                var child = mockTreeItem(treeDto.Id, true, false);
                 treeDto.Children.push(child);
             }
         }

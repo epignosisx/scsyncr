@@ -420,7 +420,7 @@ module Tree {
             var dfd = $.Deferred();
 
             setTimeout(() => {
-                dfd.resolve(mockItem(itemId, true, true));
+                dfd.resolve(mockTreeItem(itemId, true, true));
             }, 1000);
 
             return dfd.promise();
@@ -428,6 +428,11 @@ module Tree {
 
         getItem(itemId: string): JQueryPromise<IItemWrapperDto> {
             var dfd = $.Deferred();
+
+            setTimeout(() => {
+                dfd.resolve(mockItem(itemId));
+            }, 1000);
+
             return dfd.promise();
         }
     }
@@ -435,11 +440,11 @@ module Tree {
     class ServiceLocator {
         viewer: Viewer = new Viewer();
         requestManager: RequestManager = new RequestManager(2);
-        srcSvc: IDataService = new DataService();
-        tgtSvc: IDataService = new DataService();
+        //srcSvc: IDataService = new DataService();
+        //tgtSvc: IDataService = new DataService();
 
-        //srcSvc: IDataService = new DataServiceMocked();
-        //tgtSvc: IDataService = new DataServiceMocked();
+        srcSvc: IDataService = new DataServiceMocked();
+        tgtSvc: IDataService = new DataServiceMocked();
 
         static current: ServiceLocator = new ServiceLocator();
     }
@@ -490,7 +495,12 @@ module Tree {
         TemplateName: string;
     }
 
-    function mockItem(currentId: string, mustExist: boolean, addChildren: boolean): ITreeItemDto {
+    function mockItem(currentId: string): IItemWrapperDto {
+        var t = (Math.random() < 0.5 ? "1111" : "0000");
+        return { Item: null, Hash: t, Raw: t };
+    }
+
+    function mockTreeItem(currentId: string, mustExist: boolean, addChildren: boolean): ITreeItemDto {
         var shouldExist = Math.random() < 0.5;
         if (!shouldExist && !mustExist) {
             return null;
@@ -500,7 +510,7 @@ module Tree {
         if (addChildren) {
             treeDto.Children = [];
             for (var i = 0; i < 3; i++) {
-                var child = mockItem(treeDto.Id, true, false);
+                var child = mockTreeItem(treeDto.Id, true, false);
                 treeDto.Children.push(child);
             }
         }
