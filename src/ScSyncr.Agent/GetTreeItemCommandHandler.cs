@@ -31,7 +31,7 @@ namespace ScSyncr.Agent
                 foreach (Item child in item.GetChildren())
                 {
                     sb.Clear();
-                    syncItem = ItemSynchronization.BuildSyncItem(item);
+                    syncItem = ItemSynchronization.BuildSyncItem(child);
                     hash = Utils.Md5Hash(Utils.SerializeSyncItem(syncItem, sb).ToString());
                     dto.Children.Add(child.MapToTreeItemDto(hash));
                 }

@@ -1,5 +1,30 @@
 ﻿/// <reference path="../scripts/typings/knockout/knockout.d.ts" />
 
+ko.bindingHandlers.diff = {
+    init: function (element, valueAccessor, allBindings, viewModel, bindingContext) {
+        // This will be called when the binding is first applied to an element
+        // Set up any initial state, event handlers, etc. here
+        var unwrapped = valueAccessor(), source = unwrapped.source(), target = unwrapped.target();
+
+        $(element).mergely({
+            cmsettings: { readOnly: false },
+            lhs: function (setValue) {
+                setValue(source ? source.Raw : "");
+            },
+            rhs: function (setValue) {
+                setValue(target ? target.Raw : "");
+            }
+        });
+
+        unwrapped.source.subscribe(function (newValue) {
+            $(element).mergely('lhs', newValue ? newValue.Raw : "");
+        });
+        unwrapped.target.subscribe(function (newValue) {
+            $(element).mergely('rhs', newValue ? newValue.Raw : "");
+        });
+    }
+};
+
 var Tree;
 (function (Tree) {
     var MessageBus = (function () {
@@ -51,16 +76,15 @@ var Tree;
         Viewer.prototype.show = function (source, target) {
             this.source(source);
             this.target(target);
-
-            $("#compare").mergely({
-                cmsettings: { readOnly: false },
-                lhs: function (setValue) {
-                    setValue(source.name);
-                },
-                rhs: function (setValue) {
-                    setValue(source.name);
-                }
-            });
+            //$("#compare").mergely({
+            //    cmsettings: { readOnly: false },
+            //    lhs: (setValue) => {
+            //        setValue(source ? source.Raw : "");
+            //    },
+            //    rhs: (setValue) => {
+            //        setValue(target ? target.Raw : "");
+            //    }
+            //});
         };
         return Viewer;
     })();
@@ -168,8 +192,8 @@ var Tree;
             var _this = this;
             this.loadingChildren(true);
             var mng = ServiceLocator.current.requestManager;
-            var srcSvc = ServiceLocator.current.srcSrv;
-            var tgtSvc = ServiceLocator.current.tgtSrv;
+            var srcSvc = ServiceLocator.current.srcSvc;
+            var tgtSvc = ServiceLocator.current.tgtSvc;
 
             if (this.source && this.target) {
                 var srcPromise = mng.add(function () {
@@ -219,6 +243,7 @@ var Tree;
         };
 
         Node.prototype.showDetails = function () {
+            var _this = this;
             var menu = new ContextualMenu();
 
             if (this.diffDetails.type == 3 /* Modified */) {
@@ -241,7 +266,34 @@ var Tree;
 
             MessageBus.current.send("new-contextual-menu", this, menu);
 
-            ServiceLocator.current.viewer.show(this.source, this.target);
+            var mng = ServiceLocator.current.requestManager, srcSvc = ServiceLocator.current.srcSvc, tgtSvc = ServiceLocator.current.tgtSvc, srcPromise, tgtPromise;
+
+            if (this.source && this.target) {
+                srcPromise = mng.add(function () {
+                    return srcSvc.getItem(_this.source.id);
+                });
+                tgtPromise = mng.add(function () {
+                    return tgtSvc.getItem(_this.target.id);
+                });
+
+                $.when(srcPromise, tgtPromise).done(function (source, target) {
+                    ServiceLocator.current.viewer.show(source, target);
+                });
+            } else if (this.source) {
+                srcPromise = mng.add(function () {
+                    return srcSvc.getItem(_this.source.id);
+                });
+                srcPromise.done(function (source) {
+                    ServiceLocator.current.viewer.show(source, null);
+                });
+            } else if (this.target) {
+                tgtPromise = mng.add(function () {
+                    return tgtSvc.getItem(_this.target.id);
+                });
+                tgtPromise.done(function (target) {
+                    ServiceLocator.current.viewer.show(null, target);
+                });
+            }
         };
 
         Node.prototype.exclude = function () {
@@ -364,10 +416,8 @@ var Tree;
         function ServiceLocator() {
             this.viewer = new Viewer();
             this.requestManager = new RequestManager(2);
-            //srcSrv: IDataService = new DataService();
-            //tgtSrv: IDataService = new DataService();
-            this.srcSrv = new DataServiceMocked();
-            this.tgtSrv = new DataServiceMocked();
+            this.srcSvc = new DataService();
+            this.tgtSvc = new DataService();
         }
         ServiceLocator.current = new ServiceLocator();
         return ServiceLocator;
@@ -376,7 +426,7 @@ var Tree;
     var ViewModel = (function () {
         function ViewModel() {
             this.root = ko.observable();
-            this.viewer = new Viewer();
+            this.viewer = ServiceLocator.current.viewer;
             this.navigation = new Navigation();
             this.sourceEndpoint = ko.observable();
             this.targetEndpoint = ko.observable();
@@ -433,10 +483,10 @@ var Tree;
         var qs = parseQuerystring();
         var sl = ServiceLocator.current;
 
-        sl.srcSrv.setBaseUrl(qs.src);
-        sl.srcSrv.db = qs.db;
-        sl.tgtSrv.setBaseUrl(qs.tgt);
-        sl.tgtSrv.db = qs.db;
+        sl.srcSvc.setBaseUrl(qs.src);
+        sl.srcSvc.db = qs.db;
+        sl.tgtSvc.setBaseUrl(qs.tgt);
+        sl.tgtSvc.db = qs.db;
 
         var vm = new ViewModel();
         vm.sourceEndpoint(qs.src);
@@ -446,10 +496,10 @@ var Tree;
 
         var mgr = sl.requestManager;
         var srcPromise = mgr.add(function () {
-            return sl.srcSrv.getTreeItem("{11111111-1111-1111-1111-111111111111}");
+            return sl.srcSvc.getTreeItem("{11111111-1111-1111-1111-111111111111}");
         });
         var tgtPromise = mgr.add(function () {
-            return sl.tgtSrv.getTreeItem("{11111111-1111-1111-1111-111111111111}");
+            return sl.tgtSvc.getTreeItem("{11111111-1111-1111-1111-111111111111}");
         });
 
         $.when(srcPromise, tgtPromise).done(function (srcItem, tgtItem) {

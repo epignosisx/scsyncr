@@ -2,7 +2,41 @@
 
 interface JQuery {
     mergely(opts: any): JQuery;
+    mergely(method: string, param: any): JQuery;
 }
+
+interface KnockoutBindingHandlers {
+    diff
+}
+
+ko.bindingHandlers.diff = {
+    init: (element: HTMLElement, valueAccessor, allBindings, viewModel, bindingContext) => {
+        // This will be called when the binding is first applied to an element
+        // Set up any initial state, event handlers, etc. here
+
+        var unwrapped = valueAccessor(),
+            source = unwrapped.source(),
+            target = unwrapped.target();
+
+        $(element).mergely({
+            cmsettings: { readOnly: false },
+            lhs: (setValue) => {
+                setValue(source ? source.Raw : "");
+            },
+            rhs: (setValue) => {
+                setValue(target ? target.Raw : "");
+            }
+        });
+
+        unwrapped.source.subscribe(newValue => {
+            $(element).mergely('lhs', newValue ? newValue.Raw : "");
+        });
+        unwrapped.target.subscribe(newValue => {
+            $(element).mergely('rhs', newValue ? newValue.Raw : "");
+        });
+
+    }
+};
 
 module Tree {
 
@@ -47,22 +81,22 @@ module Tree {
     }
 
     export class Viewer {
-        private source: KnockoutObservable<Item> = ko.observable(null);
-        private target: KnockoutObservable<Item> = ko.observable(null);
+        private source: KnockoutObservable<IItemWrapperDto> = ko.observable(null);
+        private target: KnockoutObservable<IItemWrapperDto> = ko.observable(null);
 
-        show(source: Item, target: Item) {
+        show(source: IItemWrapperDto, target: IItemWrapperDto) {
             this.source(source);
             this.target(target);
 
-            $("#compare").mergely({
-                cmsettings: { readOnly: false },
-                lhs: function(setValue) {
-                    setValue(source.name);
-                },
-                rhs: function (setValue) {
-                    setValue(source.name);
-                }
-            });
+            //$("#compare").mergely({
+            //    cmsettings: { readOnly: false },
+            //    lhs: (setValue) => {
+            //        setValue(source ? source.Raw : "");
+            //    },
+            //    rhs: (setValue) => {
+            //        setValue(target ? target.Raw : "");
+            //    }
+            //});
         }
     }
 
@@ -185,8 +219,8 @@ module Tree {
         loadChildren() {
             this.loadingChildren(true);
             var mng = ServiceLocator.current.requestManager;
-            var srcSvc = ServiceLocator.current.srcSrv;
-            var tgtSvc = ServiceLocator.current.tgtSrv;
+            var srcSvc = ServiceLocator.current.srcSvc;
+            var tgtSvc = ServiceLocator.current.tgtSvc;
 
             if (this.source && this.target) {
                 var srcPromise = mng.add(() => srcSvc.getTreeItem(this.source.id));
@@ -249,7 +283,31 @@ module Tree {
 
             MessageBus.current.send("new-contextual-menu", this, menu);
 
-            ServiceLocator.current.viewer.show(this.source, this.target);
+
+            var mng = ServiceLocator.current.requestManager,
+                srcSvc = ServiceLocator.current.srcSvc,
+                tgtSvc = ServiceLocator.current.tgtSvc,
+                srcPromise,
+                tgtPromise;
+
+            if (this.source && this.target) {
+                srcPromise = mng.add(() => srcSvc.getItem(this.source.id));
+                tgtPromise = mng.add(() => tgtSvc.getItem(this.target.id));
+
+                $.when(srcPromise, tgtPromise).done((source: IItemWrapperDto, target: IItemWrapperDto) => {
+                    ServiceLocator.current.viewer.show(source, target);
+                });
+            }else if (this.source) {
+                srcPromise = mng.add(() => srcSvc.getItem(this.source.id));
+                srcPromise.done((source: IItemWrapperDto) => {
+                    ServiceLocator.current.viewer.show(source, null);
+                });
+            }else if (this.target) {
+                tgtPromise = mng.add(() => tgtSvc.getItem(this.target.id));
+                tgtPromise.done((target: IItemWrapperDto) => {
+                    ServiceLocator.current.viewer.show(null, target);
+                });
+            }
         }
 
         exclude() {
@@ -346,7 +404,7 @@ module Tree {
             return $.getJSON(this.baseUrl + "get-tree-item", { itemId: itemId, db: this.db });
         }
 
-        getItem(itemId: string): JQueryPromise<any> {
+        getItem(itemId: string): JQueryPromise<IItemWrapperDto> {
             return $.getJSON(this.baseUrl + "get-item", { itemId: itemId, db: this.db });
         }
     }
@@ -368,7 +426,7 @@ module Tree {
             return dfd.promise();
         }
 
-        getItem(itemId: string): JQueryPromise<any> {
+        getItem(itemId: string): JQueryPromise<IItemWrapperDto> {
             var dfd = $.Deferred();
             return dfd.promise();
         }
@@ -377,18 +435,18 @@ module Tree {
     class ServiceLocator {
         viewer: Viewer = new Viewer();
         requestManager: RequestManager = new RequestManager(2);
-        //srcSrv: IDataService = new DataService();
-        //tgtSrv: IDataService = new DataService();
+        srcSvc: IDataService = new DataService();
+        tgtSvc: IDataService = new DataService();
 
-        srcSrv: IDataService = new DataServiceMocked();
-        tgtSrv: IDataService = new DataServiceMocked();
+        //srcSvc: IDataService = new DataServiceMocked();
+        //tgtSvc: IDataService = new DataServiceMocked();
 
         static current: ServiceLocator = new ServiceLocator();
     }
 
     export class ViewModel {
         root: KnockoutObservable<Node> = ko.observable<Node>();
-        viewer: Viewer = new Viewer();
+        viewer: Viewer = ServiceLocator.current.viewer;
         navigation: Navigation = new Navigation();
         sourceEndpoint: KnockoutObservable<string> = ko.observable<string>();
         targetEndpoint: KnockoutObservable<string> = ko.observable<string>();
@@ -413,6 +471,23 @@ module Tree {
         Name: string;
         Children: ITreeItemDto[];
         Hash: string;
+    }
+
+    export interface IItemWrapperDto {
+        Item: IItemDto;
+        Raw: string;
+        Hash: string;
+    }
+
+    export interface IItemDto {
+        ID: string;
+        DatabaseName: string;
+        ParentID: string;
+        Name: string;
+        MasterID: string;
+        BranchId: string;
+        TemplateID: string;
+        TemplateName: string;
     }
 
     function mockItem(currentId: string, mustExist: boolean, addChildren: boolean): ITreeItemDto {
@@ -452,10 +527,10 @@ module Tree {
         var qs = parseQuerystring();
         var sl = ServiceLocator.current;
 
-        sl.srcSrv.setBaseUrl(qs.src);
-        sl.srcSrv.db = qs.db;
-        sl.tgtSrv.setBaseUrl(qs.tgt);
-        sl.tgtSrv.db = qs.db;
+        sl.srcSvc.setBaseUrl(qs.src);
+        sl.srcSvc.db = qs.db;
+        sl.tgtSvc.setBaseUrl(qs.tgt);
+        sl.tgtSvc.db = qs.db;
 
         var vm = new ViewModel();
         vm.sourceEndpoint(qs.src);
@@ -464,8 +539,8 @@ module Tree {
         ko.applyBindings(vm);
 
         var mgr = sl.requestManager;
-        var srcPromise = mgr.add(() => sl.srcSrv.getTreeItem("{11111111-1111-1111-1111-111111111111}"));
-        var tgtPromise = mgr.add(() => sl.tgtSrv.getTreeItem("{11111111-1111-1111-1111-111111111111}"));
+        var srcPromise = mgr.add(() => sl.srcSvc.getTreeItem("{11111111-1111-1111-1111-111111111111}"));
+        var tgtPromise = mgr.add(() => sl.tgtSvc.getTreeItem("{11111111-1111-1111-1111-111111111111}"));
 
         $.when(srcPromise, tgtPromise).done((srcItem: ITreeItemDto, tgtItem: ITreeItemDto) => {
             vm.root(new Node(srcItem, tgtItem));
