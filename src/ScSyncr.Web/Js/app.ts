@@ -19,7 +19,7 @@ ko.bindingHandlers.diff = {
             target = unwrapped.target();
 
         $(element).mergely({
-            cmsettings: { readOnly: false },
+            cmsettings: { readOnly: true },
             lhs: (setValue) => {
                 setValue(source ? source.Raw : "");
             },
