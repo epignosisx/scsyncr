@@ -1,5 +1,4 @@
 ﻿/// <reference path="../scripts/typings/knockout/knockout.d.ts" />
-
 interface JQuery {
     mergely(opts: any): JQuery;
     mergely(method: string, param: any): JQuery;
@@ -87,16 +86,6 @@ module Tree {
         show(source: IItemWrapperDto, target: IItemWrapperDto) {
             this.source(source);
             this.target(target);
-
-            //$("#compare").mergely({
-            //    cmsettings: { readOnly: false },
-            //    lhs: (setValue) => {
-            //        setValue(source ? source.Raw : "");
-            //    },
-            //    rhs: (setValue) => {
-            //        setValue(target ? target.Raw : "");
-            //    }
-            //});
         }
     }
 
@@ -128,6 +117,8 @@ module Tree {
 
         source: Item;
         target: Item;
+        sourceDetails: IItemWrapperDto;
+        targetDetails: IItemWrapperDto;
         children: KnockoutObservableArray<Node> = ko.observableArray([]);
         childrenLoaded: KnockoutObservable<boolean> = ko.observable(false);
         expanded: KnockoutObservable<boolean> = ko.observable(false);
@@ -260,30 +251,16 @@ module Tree {
         }
 
         showDetails() {
+            
+            //menu
             var menu = new ContextualMenu();
-
-            if (this.diffDetails.type == DiffType.Modified) {
-                menu.actions.push(new ContextualMenuAction("Merge", this.merge.bind(this), "octicon octicon-git-merge", "Merge conflicts between source and target."));
-            } else if (this.diffDetails.type == DiffType.Add) {
-                menu.actions.push(new ContextualMenuAction("Exclude", this.exclude.bind(this), "fa fa-ban", "Prevents source item from being added to target."));
-                //menu.actions.push(new ContextualMenuAction("Undo Exclude", this.ignore.bind(this), "fa fa-undo", "Prevents source item from being added to target."));
-            } else if (this.diffDetails.type == DiffType.Remove) {
-                menu.actions.push(new ContextualMenuAction("Keep Target", this.keepTarget.bind(this), "octicon octicon-bookmark", "Prevents target item from being removed."));
-                menu.actions.push(new ContextualMenuAction("Keep Target & Children", this.removeTarget.bind(this), "octicon octicon-bookmark", "Prevents target item and its children from being removed"));
-                //menu.actions.push(new ContextualMenuAction("Undo Keep Target", this.removeTarget.bind(this), "fa fa-undo", "Undo: Prevents target item from being removed."));
-                //menu.actions.push(new ContextualMenuAction("Undo Keep Target & Children", this.removeTarget.bind(this), "fa fa-undo", "Undo: Prevents target item and its children from being removed"));
-            } else if (this.diffDetails.type == DiffType.Unmodified) {
-
+            if (this.diffDetails.type != DiffType.Unmodified) {
+                menu.actions.push(new ContextualMenuAction("Sync", this.sync.bind(this), "octicon octicon-git-pull-request", "Applies source item changes to target."));
+                menu.actions.push(new ContextualMenuAction("Sync w/ Children", this.syncWithChildren.bind(this), "octicon octicon-git-pull-request", "Applies source item & children changes to target."));
             }
-
-            if (this.diffDetails.type == DiffType.Add || this.diffDetails.type == DiffType.Remove) {
-                menu.actions.push(new ContextualMenuAction("Sync", this.sync.bind(this), "octicon octicon-git-pull-request", "Commit changes to item to target."));
-                menu.actions.push(new ContextualMenuAction("Sync With Children", this.syncWithChildren.bind(this), "octicon octicon-git-pull-request", "Commit changes to item and children to target."));
-            }
-
             MessageBus.current.send("new-contextual-menu", this, menu);
 
-
+            //fetch items details
             var mng = ServiceLocator.current.requestManager,
                 srcSvc = ServiceLocator.current.srcSvc,
                 tgtSvc = ServiceLocator.current.tgtSvc,
@@ -295,35 +272,41 @@ module Tree {
                 tgtPromise = mng.add(() => tgtSvc.getItem(this.target.id));
 
                 $.when(srcPromise, tgtPromise).done((source: IItemWrapperDto, target: IItemWrapperDto) => {
+                    this.sourceDetails = source;
+                    this.targetDetails = target;
                     ServiceLocator.current.viewer.show(source, target);
                 });
             }else if (this.source) {
                 srcPromise = mng.add(() => srcSvc.getItem(this.source.id));
                 srcPromise.done((source: IItemWrapperDto) => {
+                    this.sourceDetails = source;
                     ServiceLocator.current.viewer.show(source, null);
                 });
             }else if (this.target) {
                 tgtPromise = mng.add(() => tgtSvc.getItem(this.target.id));
                 tgtPromise.done((target: IItemWrapperDto) => {
+                    this.targetDetails = target;
                     ServiceLocator.current.viewer.show(null, target);
                 });
             }
         }
 
-        exclude() {
-            this.syncExcluded(true);
-        }
-
-        merge() {
-        }
-
-        removeTarget() {
-        }
-
-        keepTarget() {
-        }
-
         sync() {
+            var mng = ServiceLocator.current.requestManager,
+                tgtSvc = ServiceLocator.current.tgtSvc;
+                
+            if (this.diffDetails.type == DiffType.Add || this.diffDetails.type == DiffType.Modified) {
+                mng.add(() => tgtSvc.updateItem(this.sourceDetails)).done((target: IItemWrapperDto) => {
+                    //TODO: refresh this.target
+                    this.showDetails();
+                });
+            }
+
+            if (this.diffDetails.type == DiffType.Remove) {
+                mng.add(() => tgtSvc.deleteItem(this.target.id)).done((_) => {
+                    this.showDetails();
+                });
+            }
         }
 
         syncWithChildren() {
@@ -385,7 +368,9 @@ module Tree {
         db: string;
         setBaseUrl(baseUrl: string);
         getTreeItem(itemId: string): JQueryPromise<ITreeItemDto>;
-        getItem(itemId: string): JQueryPromise<any>;
+        getItem(itemId: string): JQueryPromise<IItemWrapperDto>;
+        updateItem(item: IItemWrapperDto): JQueryPromise<IItemWrapperDto>;
+        deleteItem(itemId: string): JQueryPromise<any>;
     }
 
     class DataService implements  IDataService {
@@ -406,6 +391,24 @@ module Tree {
 
         getItem(itemId: string): JQueryPromise<IItemWrapperDto> {
             return $.getJSON(this.baseUrl + "get-item", { itemId: itemId, db: this.db });
+        }
+
+        updateItem(item: IItemWrapperDto): JQueryPromise<IItemWrapperDto> {
+            return $.ajax({
+                contentType: "application/json",
+                type: "POST",
+                url: this.baseUrl + "update-item?db=" + this.db,
+                data: item
+            });
+        }
+
+        deleteItem(itemId: string): JQueryPromise<any> {
+            return $.ajax({
+                contentType: "application/json",
+                type: "POST",
+                url: this.baseUrl + "delete-item?db=" + this.db,
+                data: { itemId: itemId }
+            });
         }
     }
 
@@ -431,6 +434,26 @@ module Tree {
 
             setTimeout(() => {
                 dfd.resolve(mockItem(itemId));
+            }, 1000);
+
+            return dfd.promise();
+        }
+
+        updateItem(item: IItemWrapperDto): JQueryPromise<IItemWrapperDto> {
+            var dfd = $.Deferred();
+
+            setTimeout(() => {
+                dfd.resolve(item);
+            }, 1000);
+
+            return dfd.promise();
+        }
+
+        deleteItem(itemId: string): JQueryPromise<any> {
+            var dfd = $.Deferred();
+
+            setTimeout(() => {
+                dfd.resolve({});
             }, 1000);
 
             return dfd.promise();
@@ -501,12 +524,13 @@ module Tree {
     }
 
     function mockTreeItem(currentId: string, mustExist: boolean, addChildren: boolean): ITreeItemDto {
-        var shouldExist = Math.random() < 0.5;
+        var shouldExist = Math.random() < 0.5,
+            hash = Math.random() < 0.5 ? "1234" : "1253";
         if (!shouldExist && !mustExist) {
             return null;
         }
 
-        var treeDto = { Id: currentId.substring(0, 3) + "1", Name: "Node " + currentId + "1", ParentId: currentId, Hash: null, Children: null };
+        var treeDto = { Id: currentId.substring(0, 3) + "1", Name: "Node " + currentId + "1", ParentId: currentId, Hash: hash, Children: null };
         if (addChildren) {
             treeDto.Children = [];
             for (var i = 0; i < 3; i++) {

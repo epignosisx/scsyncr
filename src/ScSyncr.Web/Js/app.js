@@ -76,15 +76,6 @@ var Tree;
         Viewer.prototype.show = function (source, target) {
             this.source(source);
             this.target(target);
-            //$("#compare").mergely({
-            //    cmsettings: { readOnly: false },
-            //    lhs: (setValue) => {
-            //        setValue(source ? source.Raw : "");
-            //    },
-            //    rhs: (setValue) => {
-            //        setValue(target ? target.Raw : "");
-            //    }
-            //});
         };
         return Viewer;
     })();
@@ -244,28 +235,15 @@ var Tree;
 
         Node.prototype.showDetails = function () {
             var _this = this;
+            //menu
             var menu = new ContextualMenu();
-
-            if (this.diffDetails.type == 3 /* Modified */) {
-                menu.actions.push(new ContextualMenuAction("Merge", this.merge.bind(this), "octicon octicon-git-merge", "Merge conflicts between source and target."));
-            } else if (this.diffDetails.type == 1 /* Add */) {
-                menu.actions.push(new ContextualMenuAction("Exclude", this.exclude.bind(this), "fa fa-ban", "Prevents source item from being added to target."));
-                //menu.actions.push(new ContextualMenuAction("Undo Exclude", this.ignore.bind(this), "fa fa-undo", "Prevents source item from being added to target."));
-            } else if (this.diffDetails.type == 0 /* Remove */) {
-                menu.actions.push(new ContextualMenuAction("Keep Target", this.keepTarget.bind(this), "octicon octicon-bookmark", "Prevents target item from being removed."));
-                menu.actions.push(new ContextualMenuAction("Keep Target & Children", this.removeTarget.bind(this), "octicon octicon-bookmark", "Prevents target item and its children from being removed"));
-                //menu.actions.push(new ContextualMenuAction("Undo Keep Target", this.removeTarget.bind(this), "fa fa-undo", "Undo: Prevents target item from being removed."));
-                //menu.actions.push(new ContextualMenuAction("Undo Keep Target & Children", this.removeTarget.bind(this), "fa fa-undo", "Undo: Prevents target item and its children from being removed"));
-            } else if (this.diffDetails.type == 2 /* Unmodified */) {
+            if (this.diffDetails.type != 2 /* Unmodified */) {
+                menu.actions.push(new ContextualMenuAction("Sync", this.sync.bind(this), "octicon octicon-git-pull-request", "Applies source item changes to target."));
+                menu.actions.push(new ContextualMenuAction("Sync w/ Children", this.syncWithChildren.bind(this), "octicon octicon-git-pull-request", "Applies source item & children changes to target."));
             }
-
-            if (this.diffDetails.type == 1 /* Add */ || this.diffDetails.type == 0 /* Remove */) {
-                menu.actions.push(new ContextualMenuAction("Sync", this.sync.bind(this), "octicon octicon-git-pull-request", "Commit changes to item to target."));
-                menu.actions.push(new ContextualMenuAction("Sync With Children", this.syncWithChildren.bind(this), "octicon octicon-git-pull-request", "Commit changes to item and children to target."));
-            }
-
             MessageBus.current.send("new-contextual-menu", this, menu);
 
+            //fetch items details
             var mng = ServiceLocator.current.requestManager, srcSvc = ServiceLocator.current.srcSvc, tgtSvc = ServiceLocator.current.tgtSvc, srcPromise, tgtPromise;
 
             if (this.source && this.target) {
@@ -277,6 +255,8 @@ var Tree;
                 });
 
                 $.when(srcPromise, tgtPromise).done(function (source, target) {
+                    _this.sourceDetails = source;
+                    _this.targetDetails = target;
                     ServiceLocator.current.viewer.show(source, target);
                 });
             } else if (this.source) {
@@ -284,6 +264,7 @@ var Tree;
                     return srcSvc.getItem(_this.source.id);
                 });
                 srcPromise.done(function (source) {
+                    _this.sourceDetails = source;
                     ServiceLocator.current.viewer.show(source, null);
                 });
             } else if (this.target) {
@@ -291,25 +272,32 @@ var Tree;
                     return tgtSvc.getItem(_this.target.id);
                 });
                 tgtPromise.done(function (target) {
+                    _this.targetDetails = target;
                     ServiceLocator.current.viewer.show(null, target);
                 });
             }
         };
 
-        Node.prototype.exclude = function () {
-            this.syncExcluded(true);
-        };
-
-        Node.prototype.merge = function () {
-        };
-
-        Node.prototype.removeTarget = function () {
-        };
-
-        Node.prototype.keepTarget = function () {
-        };
-
         Node.prototype.sync = function () {
+            var _this = this;
+            var mng = ServiceLocator.current.requestManager, tgtSvc = ServiceLocator.current.tgtSvc;
+
+            if (this.diffDetails.type == 1 /* Add */ || this.diffDetails.type == 3 /* Modified */) {
+                mng.add(function () {
+                    return tgtSvc.updateItem(_this.sourceDetails);
+                }).done(function (target) {
+                    //TODO: refresh this.target
+                    _this.showDetails();
+                });
+            }
+
+            if (this.diffDetails.type == 0 /* Remove */) {
+                mng.add(function () {
+                    return tgtSvc.deleteItem(_this.target.id);
+                }).done(function (_) {
+                    _this.showDetails();
+                });
+            }
         };
 
         Node.prototype.syncWithChildren = function () {
@@ -386,6 +374,24 @@ var Tree;
         DataService.prototype.getItem = function (itemId) {
             return $.getJSON(this.baseUrl + "get-item", { itemId: itemId, db: this.db });
         };
+
+        DataService.prototype.updateItem = function (item) {
+            return $.ajax({
+                contentType: "application/json",
+                type: "POST",
+                url: this.baseUrl + "update-item?db=" + this.db,
+                data: item
+            });
+        };
+
+        DataService.prototype.deleteItem = function (itemId) {
+            return $.ajax({
+                contentType: "application/json",
+                type: "POST",
+                url: this.baseUrl + "delete-item?db=" + this.db,
+                data: { itemId: itemId }
+            });
+        };
         return DataService;
     })();
 
@@ -410,6 +416,26 @@ var Tree;
 
             setTimeout(function () {
                 dfd.resolve(mockItem(itemId));
+            }, 1000);
+
+            return dfd.promise();
+        };
+
+        DataServiceMocked.prototype.updateItem = function (item) {
+            var dfd = $.Deferred();
+
+            setTimeout(function () {
+                dfd.resolve(item);
+            }, 1000);
+
+            return dfd.promise();
+        };
+
+        DataServiceMocked.prototype.deleteItem = function (itemId) {
+            var dfd = $.Deferred();
+
+            setTimeout(function () {
+                dfd.resolve({});
             }, 1000);
 
             return dfd.promise();
@@ -461,12 +487,12 @@ var Tree;
     }
 
     function mockTreeItem(currentId, mustExist, addChildren) {
-        var shouldExist = Math.random() < 0.5;
+        var shouldExist = Math.random() < 0.5, hash = Math.random() < 0.5 ? "1234" : "1253";
         if (!shouldExist && !mustExist) {
             return null;
         }
 
-        var treeDto = { Id: currentId.substring(0, 3) + "1", Name: "Node " + currentId + "1", ParentId: currentId, Hash: null, Children: null };
+        var treeDto = { Id: currentId.substring(0, 3) + "1", Name: "Node " + currentId + "1", ParentId: currentId, Hash: hash, Children: null };
         if (addChildren) {
             treeDto.Children = [];
             for (var i = 0; i < 3; i++) {

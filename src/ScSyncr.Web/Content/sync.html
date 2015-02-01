@@ -94,7 +94,7 @@
             <div id="navbar" class="navbar-collapse collapse">
                 <a href="" class="navbar-brand">ScSyncr</a>
                 <ul class="nav navbar-nav" data-bind="foreach: navigation.contextualMenu().actions">
-                    <li><a href="#" data-bind="click: action"><i data-bind="css: icon, visible: icon"></i> <span data-bind="text: title"></span></a></li>
+                    <li><a href="#" data-bind="click: action, attr: { title: description }"><i data-bind="css: icon, visible: icon"></i> <span data-bind="text: title"></span></a></li>
                 </ul>
             </div>
         </div>
