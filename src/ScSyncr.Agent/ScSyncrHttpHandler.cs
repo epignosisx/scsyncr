@@ -53,7 +53,7 @@ namespace ScSyncr.Agent
             finally
             {
                 context.Response.Headers["Access-Control-Allow-Origin"] = "*";
-                context.Response.Headers["Access-Control-Allow-Methods"] = "GET,PUT,POST,DELETE";
+                context.Response.Headers["Access-Control-Allow-Methods"] = "GET,POST";
                 if (context.Request.Headers["Access-Control-Request-Headers"] != null)
                     context.Response.Headers["Access-Control-Allow-Headers"] = context.Request.Headers["Access-Control-Request-Headers"];
                 context.Response.Headers["Access-Control-Max-Age"] = "1800";
