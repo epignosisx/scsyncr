@@ -25,8 +25,8 @@ ko.bindingHandlers.diff = {
     }
 };
 
-var Tree;
-(function (Tree) {
+var ScSyncr;
+(function (ScSyncr) {
     var MessageBus = (function () {
         function MessageBus() {
             this.listenersHash = {};
@@ -47,7 +47,7 @@ var Tree;
         MessageBus.current = new MessageBus();
         return MessageBus;
     })();
-    Tree.MessageBus = MessageBus;
+    ScSyncr.MessageBus = MessageBus;
 
     var ContextualMenuAction = (function () {
         function ContextualMenuAction(title, action, icon, description) {
@@ -58,7 +58,7 @@ var Tree;
         }
         return ContextualMenuAction;
     })();
-    Tree.ContextualMenuAction = ContextualMenuAction;
+    ScSyncr.ContextualMenuAction = ContextualMenuAction;
 
     var ContextualMenu = (function () {
         function ContextualMenu() {
@@ -66,7 +66,7 @@ var Tree;
         }
         return ContextualMenu;
     })();
-    Tree.ContextualMenu = ContextualMenu;
+    ScSyncr.ContextualMenu = ContextualMenu;
 
     var Viewer = (function () {
         function Viewer() {
@@ -79,15 +79,15 @@ var Tree;
         };
         return Viewer;
     })();
-    Tree.Viewer = Viewer;
+    ScSyncr.Viewer = Viewer;
 
     (function (DiffType) {
         DiffType[DiffType["Remove"] = 0] = "Remove";
         DiffType[DiffType["Add"] = 1] = "Add";
         DiffType[DiffType["Unmodified"] = 2] = "Unmodified";
         DiffType[DiffType["Modified"] = 3] = "Modified";
-    })(Tree.DiffType || (Tree.DiffType = {}));
-    var DiffType = Tree.DiffType;
+    })(ScSyncr.DiffType || (ScSyncr.DiffType = {}));
+    var DiffType = ScSyncr.DiffType;
 
     var DiffDetail = (function () {
         function DiffDetail(type, className, title) {
@@ -101,18 +101,21 @@ var Tree;
         DiffDetail.modified = new DiffDetail(3 /* Modified */, "fa-exclamation-circle", "Different between source and target. Target will be overriden.");
         return DiffDetail;
     })();
-    Tree.DiffDetail = DiffDetail;
+    ScSyncr.DiffDetail = DiffDetail;
 
     var Node = (function () {
         function Node(source, target) {
             var _this = this;
+            this.source = ko.observable(null);
+            this.target = ko.observable(null);
             this.children = ko.observableArray([]);
             this.childrenLoaded = ko.observable(false);
             this.expanded = ko.observable(false);
             this.loadingChildren = ko.observable(false);
+            this.diffDetails = ko.observable(null);
             this.syncExcluded = ko.observable(false);
-            this.source = source ? new Item(source) : null;
-            this.target = target ? new Item(target) : null;
+            this.source(source ? new Item(source) : null);
+            this.target(target ? new Item(target) : null);
 
             this.processChildren(source ? source.Children : null, target ? target.Children : null);
 
@@ -126,14 +129,16 @@ var Tree;
                 return _this.expanded() ? "fa-minus-square-o" : "fa-plus-square-o";
             });
             this.name = ko.computed(function () {
-                return _this.source ? _this.source.name : _this.target.name;
+                return _this.source() ? _this.source().name : _this.target().name;
             });
-            this.diffDetails = this.getDiffDetails();
+            this.diffDetails(this.getDiffDetails());
             this.diffClass = ko.computed(function () {
-                return _this.syncExcluded() ? _this.diffDetails.className + " diff-icon-disabled" : _this.diffDetails.className;
+                var diff = _this.diffDetails();
+                return _this.syncExcluded() ? diff.className + " diff-icon-disabled" : diff.className;
             });
             this.diffTitle = ko.computed(function () {
-                return _this.syncExcluded() ? "Excluded: " + _this.diffDetails.title : _this.diffDetails.title;
+                var diff = _this.diffDetails();
+                return _this.syncExcluded() ? "Excluded: " + diff.title : diff.title;
             });
         }
         Node.prototype.processChildren = function (srcChildren, tgtChildren) {
@@ -182,16 +187,14 @@ var Tree;
         Node.prototype.loadChildren = function () {
             var _this = this;
             this.loadingChildren(true);
-            var mng = ServiceLocator.current.requestManager;
-            var srcSvc = ServiceLocator.current.srcSvc;
-            var tgtSvc = ServiceLocator.current.tgtSvc;
+            var mng = ServiceLocator.current.requestManager, srcSvc = ServiceLocator.current.srcSvc, tgtSvc = ServiceLocator.current.tgtSvc, src = this.source(), tgt = this.target();
 
-            if (this.source && this.target) {
+            if (src && tgt) {
                 var srcPromise = mng.add(function () {
-                    return srcSvc.getTreeItem(_this.source.id);
+                    return srcSvc.getTreeItem(src.id);
                 });
                 var tgtPromise = mng.add(function () {
-                    return tgtSvc.getTreeItem(_this.target.id);
+                    return tgtSvc.getTreeItem(tgt.id);
                 });
                 $.when(srcPromise, tgtPromise).done(function (source, target) {
                     _this.processChildren(source.Children, target.Children);
@@ -199,9 +202,9 @@ var Tree;
                     _this.loadingChildren(false);
                     _this.expanded(true);
                 });
-            } else if (this.source) {
+            } else if (src) {
                 mng.add(function () {
-                    return srcSvc.getTreeItem(_this.source.id);
+                    return srcSvc.getTreeItem(src.id);
                 }).done(function (source) {
                     _this.processChildren(source.Children, null);
                 }).always(function () {
@@ -209,9 +212,9 @@ var Tree;
                     _this.expanded(true);
                 });
                 ;
-            } else if (this.target) {
+            } else if (tgt) {
                 mng.add(function () {
-                    return tgtSvc.getTreeItem(_this.target.id);
+                    return tgtSvc.getTreeItem(tgt.id);
                 }).done(function (target) {
                     _this.processChildren(null, target.Children);
                 }).always(function () {
@@ -223,35 +226,40 @@ var Tree;
         };
 
         Node.prototype.getDiffDetails = function () {
-            if (!this.source) {
+            var src = this.source(), tgt = this.target();
+            if (!src) {
                 return DiffDetail.remove;
-            } else if (!this.target) {
+            } else if (!tgt) {
                 return DiffDetail.add;
-            } else if (this.source.hash == this.target.hash) {
+            } else if (src.hash == tgt.hash) {
                 return DiffDetail.unmodified;
             }
             return DiffDetail.modified;
         };
 
-        Node.prototype.showDetails = function () {
-            var _this = this;
-            //menu
+        Node.prototype.updateContextMenu = function () {
             var menu = new ContextualMenu();
-            if (this.diffDetails.type != 2 /* Unmodified */) {
+            if (this.diffDetails().type != 2 /* Unmodified */) {
                 menu.actions.push(new ContextualMenuAction("Sync", this.sync.bind(this), "octicon octicon-git-pull-request", "Applies source item changes to target."));
                 menu.actions.push(new ContextualMenuAction("Sync w/ Children", this.syncWithChildren.bind(this), "octicon octicon-git-pull-request", "Applies source item & children changes to target."));
             }
             MessageBus.current.send("new-contextual-menu", this, menu);
+        };
+
+        Node.prototype.showDetails = function () {
+            var _this = this;
+            //menu
+            this.updateContextMenu();
 
             //fetch items details
-            var mng = ServiceLocator.current.requestManager, srcSvc = ServiceLocator.current.srcSvc, tgtSvc = ServiceLocator.current.tgtSvc, srcPromise, tgtPromise;
+            var mng = ServiceLocator.current.requestManager, srcSvc = ServiceLocator.current.srcSvc, tgtSvc = ServiceLocator.current.tgtSvc, src = this.source(), tgt = this.target(), srcPromise, tgtPromise;
 
-            if (this.source && this.target) {
+            if (src && tgt) {
                 srcPromise = mng.add(function () {
-                    return srcSvc.getItem(_this.source.id);
+                    return srcSvc.getItem(src.id);
                 });
                 tgtPromise = mng.add(function () {
-                    return tgtSvc.getItem(_this.target.id);
+                    return tgtSvc.getItem(tgt.id);
                 });
 
                 $.when(srcPromise, tgtPromise).done(function (source, target) {
@@ -259,17 +267,17 @@ var Tree;
                     _this.targetDetails = target;
                     ServiceLocator.current.viewer.show(source, target);
                 });
-            } else if (this.source) {
+            } else if (src) {
                 srcPromise = mng.add(function () {
-                    return srcSvc.getItem(_this.source.id);
+                    return srcSvc.getItem(src.id);
                 });
                 srcPromise.done(function (source) {
                     _this.sourceDetails = source;
                     ServiceLocator.current.viewer.show(source, null);
                 });
-            } else if (this.target) {
+            } else if (tgt) {
                 tgtPromise = mng.add(function () {
-                    return tgtSvc.getItem(_this.target.id);
+                    return tgtSvc.getItem(tgt.id);
                 });
                 tgtPromise.done(function (target) {
                     _this.targetDetails = target;
@@ -280,22 +288,29 @@ var Tree;
 
         Node.prototype.sync = function () {
             var _this = this;
-            var mng = ServiceLocator.current.requestManager, tgtSvc = ServiceLocator.current.tgtSvc;
+            var mng = ServiceLocator.current.requestManager, tgtSvc = ServiceLocator.current.tgtSvc, diff = this.diffDetails();
 
-            if (this.diffDetails.type == 1 /* Add */ || this.diffDetails.type == 3 /* Modified */) {
+            if (diff.type == 1 /* Add */ || diff.type == 3 /* Modified */) {
                 mng.add(function () {
                     return tgtSvc.updateItem(_this.sourceDetails);
                 }).done(function (target) {
-                    //TODO: refresh this.target
-                    _this.showDetails();
+                    _this.target(new Item({ Id: target.Item.ID, Name: target.Item.Name, ParentId: target.Item.ParentID, Hash: target.Hash, Children: null }));
+                    _this.targetDetails = target;
+                    _this.diffDetails(_this.getDiffDetails());
+                    _this.updateContextMenu();
+                    ServiceLocator.current.viewer.show(_this.sourceDetails, target);
                 });
             }
 
-            if (this.diffDetails.type == 0 /* Remove */) {
+            if (diff.type == 0 /* Remove */) {
                 mng.add(function () {
-                    return tgtSvc.deleteItem(_this.target.id);
+                    return tgtSvc.deleteItem(_this.target().id);
                 }).done(function (_) {
-                    _this.showDetails();
+                    _this.target(null);
+                    _this.targetDetails = null;
+                    _this.diffDetails(_this.getDiffDetails());
+                    _this.updateContextMenu();
+                    ServiceLocator.current.viewer.show(null, null);
                 });
             }
         };
@@ -304,7 +319,7 @@ var Tree;
         };
         return Node;
     })();
-    Tree.Node = Node;
+    ScSyncr.Node = Node;
 
     var Item = (function () {
         function Item(data) {
@@ -315,7 +330,7 @@ var Tree;
         }
         return Item;
     })();
-    Tree.Item = Item;
+    ScSyncr.Item = Item;
 
     var RequestManager = (function () {
         function RequestManager(maxConcurrentRequests) {
@@ -380,7 +395,7 @@ var Tree;
                 contentType: "application/json",
                 type: "POST",
                 url: this.baseUrl + "update-item?db=" + this.db,
-                data: item
+                data: JSON.stringify(item)
             });
         };
 
@@ -447,10 +462,8 @@ var Tree;
         function ServiceLocator() {
             this.viewer = new Viewer();
             this.requestManager = new RequestManager(2);
-            //srcSvc: IDataService = new DataService();
-            //tgtSvc: IDataService = new DataService();
-            this.srcSvc = new DataServiceMocked();
-            this.tgtSvc = new DataServiceMocked();
+            this.srcSvc = new DataService();
+            this.tgtSvc = new DataService();
         }
         ServiceLocator.current = new ServiceLocator();
         return ServiceLocator;
@@ -466,7 +479,7 @@ var Tree;
         }
         return ViewModel;
     })();
-    Tree.ViewModel = ViewModel;
+    ScSyncr.ViewModel = ViewModel;
 
     var Navigation = (function () {
         function Navigation() {
@@ -479,7 +492,7 @@ var Tree;
         };
         return Navigation;
     })();
-    Tree.Navigation = Navigation;
+    ScSyncr.Navigation = Navigation;
 
     function mockItem(currentId) {
         var t = (Math.random() < 0.5 ? "1111" : "0000");
@@ -544,5 +557,5 @@ var Tree;
             vm.root(new Node(srcItem, tgtItem));
         });
     })();
-})(Tree || (Tree = {}));
+})(ScSyncr || (ScSyncr = {}));
 //# sourceMappingURL=app.js.map

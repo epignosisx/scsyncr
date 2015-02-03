@@ -37,7 +37,7 @@ ko.bindingHandlers.diff = {
     }
 };
 
-module Tree {
+module ScSyncr {
 
     export class MessageBus {
 
@@ -115,8 +115,8 @@ module Tree {
 
     export class Node {
 
-        source: Item;
-        target: Item;
+        source: KnockoutObservable<Item> = ko.observable(null);
+        target: KnockoutObservable<Item> = ko.observable(null);
         sourceDetails: IItemWrapperDto;
         targetDetails: IItemWrapperDto;
         children: KnockoutObservableArray<Node> = ko.observableArray([]);
@@ -126,13 +126,13 @@ module Tree {
         expandClass: KnockoutComputed<string>;
         diffClass: KnockoutComputed<string>;
         diffTitle: KnockoutComputed<string>;
-        diffDetails: DiffDetail;
+        diffDetails: KnockoutObservable<DiffDetail> = ko.observable(null);
         syncExcluded: KnockoutObservable<boolean> = ko.observable(false);
         name: KnockoutComputed<string>;
 
         constructor(source: ITreeItemDto, target: ITreeItemDto) {
-            this.source = source ? new Item(source) : null;
-            this.target = target ? new Item(target) : null;
+            this.source(source ? new Item(source) : null);
+            this.target(target ? new Item(target) : null);
 
             this.processChildren(source ? source.Children : null, target ? target.Children : null);
 
@@ -146,14 +146,16 @@ module Tree {
                 return this.expanded() ? "fa-minus-square-o" : "fa-plus-square-o";
             });
             this.name = ko.computed(() => {
-                return this.source ? this.source.name : this.target.name;
+                return this.source() ? this.source().name : this.target().name;
             });
-            this.diffDetails = this.getDiffDetails();
+            this.diffDetails(this.getDiffDetails());
             this.diffClass = ko.computed(() => {
-                return this.syncExcluded() ? this.diffDetails.className + " diff-icon-disabled" : this.diffDetails.className;
+                var diff = this.diffDetails();
+                return this.syncExcluded() ? diff.className + " diff-icon-disabled" : diff.className;
             });
             this.diffTitle = ko.computed(() => {
-                return this.syncExcluded() ? "Excluded: " + this.diffDetails.title : this.diffDetails.title; 
+                var diff = this.diffDetails();
+                return this.syncExcluded() ? "Excluded: " + diff.title : diff.title; 
             });
         }
 
@@ -209,28 +211,30 @@ module Tree {
 
         loadChildren() {
             this.loadingChildren(true);
-            var mng = ServiceLocator.current.requestManager;
-            var srcSvc = ServiceLocator.current.srcSvc;
-            var tgtSvc = ServiceLocator.current.tgtSvc;
+            var mng = ServiceLocator.current.requestManager,
+                srcSvc = ServiceLocator.current.srcSvc,
+                tgtSvc = ServiceLocator.current.tgtSvc,
+                src = this.source(),
+                tgt = this.target();
 
-            if (this.source && this.target) {
-                var srcPromise = mng.add(() => srcSvc.getTreeItem(this.source.id));
-                var tgtPromise = mng.add(() => tgtSvc.getTreeItem(this.target.id));
+            if (src && tgt) {
+                var srcPromise = mng.add(() => srcSvc.getTreeItem(src.id));
+                var tgtPromise = mng.add(() => tgtSvc.getTreeItem(tgt.id));
                 $.when(srcPromise, tgtPromise).done((source: ITreeItemDto, target: ITreeItemDto) => {
                     this.processChildren(source.Children, target.Children);
                 }).always(() => {
                     this.loadingChildren(false);
                     this.expanded(true);
                 });
-            } else if (this.source) {
-                mng.add(() => srcSvc.getTreeItem(this.source.id)).done((source) => {
+            } else if (src) {
+                mng.add(() => srcSvc.getTreeItem(src.id)).done((source) => {
                     this.processChildren(source.Children, null);
                 }).always(() => {
                     this.loadingChildren(false);
                     this.expanded(true);
                 });;
-            } else if (this.target) {
-                mng.add(() => tgtSvc.getTreeItem(this.target.id)).done((target) => {
+            } else if (tgt) {
+                mng.add(() => tgtSvc.getTreeItem(tgt.id)).done((target) => {
                     this.processChildren(null, target.Children);
                 }).always(() => {
                     this.loadingChildren(false);
@@ -240,50 +244,57 @@ module Tree {
         }
 
         getDiffDetails(): DiffDetail {
-            if (!this.source) {
+            var src = this.source(),
+                tgt = this.target();
+            if (!src) {
                 return DiffDetail.remove;
-            } else if (!this.target) {
+            } else if (!tgt) {
                 return DiffDetail.add;
-            } else if(this.source.hash == this.target.hash) {
+            } else if(src.hash == tgt.hash) {
                 return DiffDetail.unmodified;
             }
             return DiffDetail.modified;
         }
 
-        showDetails() {
-            
-            //menu
+        updateContextMenu() {
             var menu = new ContextualMenu();
-            if (this.diffDetails.type != DiffType.Unmodified) {
+            if (this.diffDetails().type != DiffType.Unmodified) {
                 menu.actions.push(new ContextualMenuAction("Sync", this.sync.bind(this), "octicon octicon-git-pull-request", "Applies source item changes to target."));
                 menu.actions.push(new ContextualMenuAction("Sync w/ Children", this.syncWithChildren.bind(this), "octicon octicon-git-pull-request", "Applies source item & children changes to target."));
             }
             MessageBus.current.send("new-contextual-menu", this, menu);
+        }
+
+        showDetails() {
+            //menu
+            this.updateContextMenu();
 
             //fetch items details
             var mng = ServiceLocator.current.requestManager,
                 srcSvc = ServiceLocator.current.srcSvc,
                 tgtSvc = ServiceLocator.current.tgtSvc,
+                src = this.source(),
+                tgt = this.target(),
                 srcPromise,
                 tgtPromise;
 
-            if (this.source && this.target) {
-                srcPromise = mng.add(() => srcSvc.getItem(this.source.id));
-                tgtPromise = mng.add(() => tgtSvc.getItem(this.target.id));
+            if (src && tgt) {
+                srcPromise = mng.add(() => srcSvc.getItem(src.id));
+                tgtPromise = mng.add(() => tgtSvc.getItem(tgt.id));
 
                 $.when(srcPromise, tgtPromise).done((source: IItemWrapperDto, target: IItemWrapperDto) => {
                     this.sourceDetails = source;
                     this.targetDetails = target;
                     ServiceLocator.current.viewer.show(source, target);
                 });
-            }else if (this.source) {
-                srcPromise = mng.add(() => srcSvc.getItem(this.source.id));
+            }else if (src) {
+                srcPromise = mng.add(() => srcSvc.getItem(src.id));
                 srcPromise.done((source: IItemWrapperDto) => {
                     this.sourceDetails = source;
                     ServiceLocator.current.viewer.show(source, null);
                 });
-            }else if (this.target) {
-                tgtPromise = mng.add(() => tgtSvc.getItem(this.target.id));
+            }else if (tgt) {
+                tgtPromise = mng.add(() => tgtSvc.getItem(tgt.id));
                 tgtPromise.done((target: IItemWrapperDto) => {
                     this.targetDetails = target;
                     ServiceLocator.current.viewer.show(null, target);
@@ -293,18 +304,26 @@ module Tree {
 
         sync() {
             var mng = ServiceLocator.current.requestManager,
-                tgtSvc = ServiceLocator.current.tgtSvc;
+                tgtSvc = ServiceLocator.current.tgtSvc,
+                diff = this.diffDetails();
                 
-            if (this.diffDetails.type == DiffType.Add || this.diffDetails.type == DiffType.Modified) {
+            if (diff.type == DiffType.Add || diff.type == DiffType.Modified) {
                 mng.add(() => tgtSvc.updateItem(this.sourceDetails)).done((target: IItemWrapperDto) => {
-                    //TODO: refresh this.target
-                    this.showDetails();
+                    this.target(new Item({ Id: target.Item.ID, Name: target.Item.Name, ParentId: target.Item.ParentID, Hash: target.Hash, Children: null }));
+                    this.targetDetails = target;
+                    this.diffDetails(this.getDiffDetails());
+                    this.updateContextMenu();
+                    ServiceLocator.current.viewer.show(this.sourceDetails, target);
                 });
             }
 
-            if (this.diffDetails.type == DiffType.Remove) {
-                mng.add(() => tgtSvc.deleteItem(this.target.id)).done((_) => {
-                    this.showDetails();
+            if (diff.type == DiffType.Remove) {
+                mng.add(() => tgtSvc.deleteItem(this.target().id)).done((_) => {
+                    this.target(null);
+                    this.targetDetails = null;
+                    this.diffDetails(this.getDiffDetails());
+                    this.updateContextMenu();
+                    ServiceLocator.current.viewer.show(null, null);
                 });
             }
         }
@@ -398,7 +417,7 @@ module Tree {
                 contentType: "application/json",
                 type: "POST",
                 url: this.baseUrl + "update-item?db=" + this.db,
-                data: item
+                data: JSON.stringify(item)
             });
         }
 
@@ -463,11 +482,11 @@ module Tree {
     class ServiceLocator {
         viewer: Viewer = new Viewer();
         requestManager: RequestManager = new RequestManager(2);
-        //srcSvc: IDataService = new DataService();
-        //tgtSvc: IDataService = new DataService();
+        srcSvc: IDataService = new DataService();
+        tgtSvc: IDataService = new DataService();
 
-        srcSvc: IDataService = new DataServiceMocked();
-        tgtSvc: IDataService = new DataServiceMocked();
+        //srcSvc: IDataService = new DataServiceMocked();
+        //tgtSvc: IDataService = new DataServiceMocked();
 
         static current: ServiceLocator = new ServiceLocator();
     }
