@@ -169,12 +169,10 @@ module ScSyncr {
             tgtChildren = tgtChildren || [];
 
             var srcIdx = 0,
-                srcLastMatched = 0,
                 tgtIdx = 0,
                 tgtLastMatched = 0,
                 srcLen = srcChildren.length,
-                tgtLen = tgtChildren.length,
-                src, tgt;
+                tgtLen = tgtChildren.length;
 
             
             for (; srcIdx < srcLen; srcIdx++) {
@@ -209,7 +207,7 @@ module ScSyncr {
             }
         }
 
-        loadChildren() {
+        loadChildren(): JQueryPromise<any> {
             this.loadingChildren(true);
             var mng = ServiceLocator.current.requestManager,
                 srcSvc = ServiceLocator.current.srcSvc,
@@ -220,27 +218,37 @@ module ScSyncr {
             if (src && tgt) {
                 var srcPromise = mng.add(() => srcSvc.getTreeItem(src.id));
                 var tgtPromise = mng.add(() => tgtSvc.getTreeItem(tgt.id));
-                $.when(srcPromise, tgtPromise).done((source: ITreeItemDto, target: ITreeItemDto) => {
+                return $.when(srcPromise, tgtPromise).done((source: ITreeItemDto, target: ITreeItemDto) => {
                     this.processChildren(source.Children, target.Children);
                 }).always(() => {
                     this.loadingChildren(false);
                     this.expanded(true);
                 });
             } else if (src) {
-                mng.add(() => srcSvc.getTreeItem(src.id)).done((source) => {
+                return mng.add(() => srcSvc.getTreeItem(src.id)).done((source) => {
                     this.processChildren(source.Children, null);
                 }).always(() => {
                     this.loadingChildren(false);
                     this.expanded(true);
                 });;
             } else if (tgt) {
-                mng.add(() => tgtSvc.getTreeItem(tgt.id)).done((target) => {
+                return mng.add(() => tgtSvc.getTreeItem(tgt.id)).done((target) => {
                     this.processChildren(null, target.Children);
                 }).always(() => {
                     this.loadingChildren(false);
                     this.expanded(true);
                 });;
             }
+            return null;
+        }
+
+        ensureChildrenLoaded(): JQueryPromise<any> {
+            if (!this.childrenLoaded()) {
+                return this.loadChildren();
+            }
+            var dfd = $.Deferred();
+            dfd.resolve(true);
+            return dfd.promise();
         }
 
         getDiffDetails(): DiffDetail {
@@ -303,12 +311,16 @@ module ScSyncr {
         }
 
         sync() {
+            this.syncHelper(true);
+        }
+
+        syncHelper(shouldRefreshViewer: boolean) {
             var mng = ServiceLocator.current.requestManager,
                 tgtSvc = ServiceLocator.current.tgtSvc,
                 diff = this.diffDetails();
-                
+
             if (diff.type == DiffType.Add || diff.type == DiffType.Modified) {
-                mng.add(() => tgtSvc.updateItem(this.sourceDetails)).done((target: IItemWrapperDto) => {
+                return mng.add(() => tgtSvc.updateItem(this.sourceDetails)).done((target: IItemWrapperDto) => {
                     this.target(new Item({ Id: target.Item.ID, Name: target.Item.Name, ParentId: target.Item.ParentID, Hash: target.Hash, Children: null }));
                     this.targetDetails = target;
                     this.diffDetails(this.getDiffDetails());
@@ -318,7 +330,7 @@ module ScSyncr {
             }
 
             if (diff.type == DiffType.Remove) {
-                mng.add(() => tgtSvc.deleteItem(this.target().id)).done((_) => {
+                return mng.add(() => tgtSvc.deleteItem(this.target().id)).done((_) => {
                     this.target(null);
                     this.targetDetails = null;
                     this.diffDetails(this.getDiffDetails());
@@ -326,9 +338,27 @@ module ScSyncr {
                     ServiceLocator.current.viewer.show(null, null);
                 });
             }
+
+            var dfd = $.Deferred();
+            dfd.resolve(true);
+            return dfd.promise();
         }
 
         syncWithChildren() {
+            this.syncChildrenHelper(true);
+        }
+
+        syncChildrenHelper(shouldRefreshViewer: boolean) {
+            var mng = ServiceLocator.current.requestManager,
+                srcSvc = ServiceLocator.current.srcSvc,
+                tgtSvc = ServiceLocator.current.tgtSvc,
+                diff = this.diffDetails();
+
+            this.syncHelper(true).done(this.ensureChildrenLoaded).done(() => {
+                this.children().forEach((child: Node) => {
+                    child.syncChildrenHelper(false);
+                });
+            });
         }
     }
 

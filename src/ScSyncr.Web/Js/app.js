@@ -150,7 +150,7 @@ var ScSyncr;
             srcChildren = srcChildren || [];
             tgtChildren = tgtChildren || [];
 
-            var srcIdx = 0, srcLastMatched = 0, tgtIdx = 0, tgtLastMatched = 0, srcLen = srcChildren.length, tgtLen = tgtChildren.length, src, tgt;
+            var srcIdx = 0, tgtIdx = 0, tgtLastMatched = 0, srcLen = srcChildren.length, tgtLen = tgtChildren.length;
 
             for (; srcIdx < srcLen; srcIdx++) {
                 var found = false;
@@ -196,14 +196,14 @@ var ScSyncr;
                 var tgtPromise = mng.add(function () {
                     return tgtSvc.getTreeItem(tgt.id);
                 });
-                $.when(srcPromise, tgtPromise).done(function (source, target) {
+                return $.when(srcPromise, tgtPromise).done(function (source, target) {
                     _this.processChildren(source.Children, target.Children);
                 }).always(function () {
                     _this.loadingChildren(false);
                     _this.expanded(true);
                 });
             } else if (src) {
-                mng.add(function () {
+                return mng.add(function () {
                     return srcSvc.getTreeItem(src.id);
                 }).done(function (source) {
                     _this.processChildren(source.Children, null);
@@ -213,7 +213,7 @@ var ScSyncr;
                 });
                 ;
             } else if (tgt) {
-                mng.add(function () {
+                return mng.add(function () {
                     return tgtSvc.getTreeItem(tgt.id);
                 }).done(function (target) {
                     _this.processChildren(null, target.Children);
@@ -223,6 +223,16 @@ var ScSyncr;
                 });
                 ;
             }
+            return null;
+        };
+
+        Node.prototype.ensureChildrenLoaded = function () {
+            if (!this.childrenLoaded()) {
+                return this.loadChildren();
+            }
+            var dfd = $.Deferred();
+            dfd.resolve(true);
+            return dfd.promise();
         };
 
         Node.prototype.getDiffDetails = function () {
@@ -287,11 +297,15 @@ var ScSyncr;
         };
 
         Node.prototype.sync = function () {
+            this.syncHelper(true);
+        };
+
+        Node.prototype.syncHelper = function (shouldRefreshViewer) {
             var _this = this;
             var mng = ServiceLocator.current.requestManager, tgtSvc = ServiceLocator.current.tgtSvc, diff = this.diffDetails();
 
             if (diff.type == 1 /* Add */ || diff.type == 3 /* Modified */) {
-                mng.add(function () {
+                return mng.add(function () {
                     return tgtSvc.updateItem(_this.sourceDetails);
                 }).done(function (target) {
                     _this.target(new Item({ Id: target.Item.ID, Name: target.Item.Name, ParentId: target.Item.ParentID, Hash: target.Hash, Children: null }));
@@ -303,7 +317,7 @@ var ScSyncr;
             }
 
             if (diff.type == 0 /* Remove */) {
-                mng.add(function () {
+                return mng.add(function () {
                     return tgtSvc.deleteItem(_this.target().id);
                 }).done(function (_) {
                     _this.target(null);
@@ -313,9 +327,25 @@ var ScSyncr;
                     ServiceLocator.current.viewer.show(null, null);
                 });
             }
+
+            var dfd = $.Deferred();
+            dfd.resolve(true);
+            return dfd.promise();
         };
 
         Node.prototype.syncWithChildren = function () {
+            this.syncChildrenHelper(true);
+        };
+
+        Node.prototype.syncChildrenHelper = function (shouldRefreshViewer) {
+            var _this = this;
+            var mng = ServiceLocator.current.requestManager, srcSvc = ServiceLocator.current.srcSvc, tgtSvc = ServiceLocator.current.tgtSvc, diff = this.diffDetails();
+
+            this.syncHelper(true).done(this.ensureChildrenLoaded).done(function () {
+                _this.children().forEach(function (child) {
+                    child.syncChildrenHelper(false);
+                });
+            });
         };
         return Node;
     })();
