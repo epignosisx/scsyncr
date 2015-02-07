@@ -117,6 +117,7 @@
                     <li data-bind="with: root">
                         <i class="fa diff-icon" data-bind="css: diffClass, attr: { title: diffTitle }"></i>
                         <a href="#" data-bind="click: toggleExpand"><i class="fa" data-bind="css: expandClass"></i></a>
+                        <img data-bind="attr: {src: icon} " width="16" height="16" />
                         <a href="#" data-bind="click: showDetails, text: name"></a>
                         <ul data-bind="template: {name: 'node-tmpl', foreach: children}, visible: expanded"></ul>
                     </li>
@@ -132,6 +133,7 @@
         <li>
             <i class="fa diff-icon" data-bind="css: diffClass, attr: { title: diffTitle }"></i>
             <a href="#" data-bind="click: toggleExpand"><i class="fa" data-bind="css: expandClass"></i></a>
+            <img data-bind="attr: {src: icon} " width="16" height="16"/>
             <a href="#" data-bind="click: showDetails, text: name"></a>
             <ul data-bind="template: {name: 'node-tmpl', foreach: children}, visible: expanded"></ul>
         </li>

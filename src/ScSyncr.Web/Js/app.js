@@ -131,6 +131,9 @@ var ScSyncr;
             this.name = ko.computed(function () {
                 return _this.source() ? _this.source().name : _this.target().name;
             });
+            this.icon = ko.computed(function () {
+                return _this.source() ? _this.source().icon : _this.target().icon;
+            });
             this.diffDetails(this.getDiffDetails());
             this.diffClass = ko.computed(function () {
                 var diff = _this.diffDetails();
@@ -249,18 +252,19 @@ var ScSyncr;
 
         Node.prototype.updateContextMenu = function () {
             var menu = new ContextualMenu();
-            if (this.diffDetails().type != 2 /* Unmodified */) {
-                menu.actions.push(new ContextualMenuAction("Sync", this.sync.bind(this), "octicon octicon-git-pull-request", "Applies source item changes to target."));
-                menu.actions.push(new ContextualMenuAction("Sync w/ Children", this.syncWithChildren.bind(this), "octicon octicon-git-pull-request", "Applies source item & children changes to target."));
-            }
+            menu.actions.push(new ContextualMenuAction("Sync", this.sync.bind(this), "octicon octicon-git-pull-request", "Applies source item changes to target."));
+            menu.actions.push(new ContextualMenuAction("Sync Recursive", this.syncWithChildren.bind(this), "octicon octicon-git-pull-request", "Applies source item & children changes to target."));
             MessageBus.current.send("new-contextual-menu", this, menu);
         };
 
         Node.prototype.showDetails = function () {
-            var _this = this;
             //menu
             this.updateContextMenu();
+            this.ensureItemLoaded(true);
+        };
 
+        Node.prototype.ensureItemLoaded = function (refreshViewer) {
+            var _this = this;
             //fetch items details
             var mng = ServiceLocator.current.requestManager, srcSvc = ServiceLocator.current.srcSvc, tgtSvc = ServiceLocator.current.tgtSvc, src = this.source(), tgt = this.target(), srcPromise, tgtPromise;
 
@@ -272,28 +276,38 @@ var ScSyncr;
                     return tgtSvc.getItem(tgt.id);
                 });
 
-                $.when(srcPromise, tgtPromise).done(function (source, target) {
+                return $.when(srcPromise, tgtPromise).done(function (source, target) {
                     _this.sourceDetails = source;
                     _this.targetDetails = target;
-                    ServiceLocator.current.viewer.show(source, target);
+                    if (refreshViewer) {
+                        ServiceLocator.current.viewer.show(source, target);
+                    }
                 });
             } else if (src) {
                 srcPromise = mng.add(function () {
                     return srcSvc.getItem(src.id);
                 });
-                srcPromise.done(function (source) {
+                return srcPromise.done(function (source) {
                     _this.sourceDetails = source;
-                    ServiceLocator.current.viewer.show(source, null);
+                    if (refreshViewer) {
+                        ServiceLocator.current.viewer.show(source, null);
+                    }
                 });
             } else if (tgt) {
                 tgtPromise = mng.add(function () {
                     return tgtSvc.getItem(tgt.id);
                 });
-                tgtPromise.done(function (target) {
+                return tgtPromise.done(function (target) {
                     _this.targetDetails = target;
-                    ServiceLocator.current.viewer.show(null, target);
+                    if (refreshViewer) {
+                        ServiceLocator.current.viewer.show(null, target);
+                    }
                 });
             }
+
+            var dfd = $.Deferred();
+            dfd.resolve(true);
+            return dfd.promise();
         };
 
         Node.prototype.sync = function () {
@@ -308,11 +322,13 @@ var ScSyncr;
                 return mng.add(function () {
                     return tgtSvc.updateItem(_this.sourceDetails);
                 }).done(function (target) {
-                    _this.target(new Item({ Id: target.Item.ID, Name: target.Item.Name, ParentId: target.Item.ParentID, Hash: target.Hash, Children: null }));
+                    _this.target(new Item({ Id: target.Item.ID, Name: target.Item.Name, ParentId: target.Item.ParentID, Hash: target.Hash, Children: null, Icon: null }));
                     _this.targetDetails = target;
                     _this.diffDetails(_this.getDiffDetails());
                     _this.updateContextMenu();
-                    ServiceLocator.current.viewer.show(_this.sourceDetails, target);
+                    if (shouldRefreshViewer) {
+                        ServiceLocator.current.viewer.show(_this.sourceDetails, target);
+                    }
                 });
             }
 
@@ -324,7 +340,9 @@ var ScSyncr;
                     _this.targetDetails = null;
                     _this.diffDetails(_this.getDiffDetails());
                     _this.updateContextMenu();
-                    ServiceLocator.current.viewer.show(null, null);
+                    if (shouldRefreshViewer) {
+                        ServiceLocator.current.viewer.show(null, null);
+                    }
                 });
             }
 
@@ -339,9 +357,9 @@ var ScSyncr;
 
         Node.prototype.syncChildrenHelper = function (shouldRefreshViewer) {
             var _this = this;
-            var mng = ServiceLocator.current.requestManager, srcSvc = ServiceLocator.current.srcSvc, tgtSvc = ServiceLocator.current.tgtSvc, diff = this.diffDetails();
-
-            this.syncHelper(true).done(this.ensureChildrenLoaded).done(function () {
+            this.ensureItemLoaded().done(function () {
+                return _this.syncHelper(shouldRefreshViewer);
+            }).done(this.ensureChildrenLoaded.bind(this)).done(function () {
                 _this.children().forEach(function (child) {
                     child.syncChildrenHelper(false);
                 });
@@ -357,6 +375,7 @@ var ScSyncr;
             this.name = data.Name;
             this.parentId = data.ParentId;
             this.hash = data.Hash;
+            this.icon = data.Icon;
         }
         return Item;
     })();
@@ -535,7 +554,7 @@ var ScSyncr;
             return null;
         }
 
-        var treeDto = { Id: currentId.substring(0, 3) + "1", Name: "Node " + currentId + "1", ParentId: currentId, Hash: hash, Children: null };
+        var treeDto = { Id: currentId.substring(0, 3) + "1", Name: "Node " + currentId + "1", ParentId: currentId, Hash: hash, Children: null, Icon: null };
         if (addChildren) {
             treeDto.Children = [];
             for (var i = 0; i < 3; i++) {

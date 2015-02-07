@@ -7,7 +7,6 @@ using Sitecore.Data.Items;
 using Sitecore.Data.Serialization;
 using Sitecore.Data.Serialization.ObjectModel;
 using Sitecore.SecurityModel;
-using Sitecore.WordOCX.Extensions;
 
 namespace ScSyncr.Agent
 {
@@ -19,7 +18,7 @@ namespace ScSyncr.Agent
             if (!request.ContentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase))
             {
                 context.Response.StatusCode = 400;
-                context.Response.WriteLine("Expected Content Type: application/json, but received: " + request.ContentType);
+                context.Response.Write("Expected Content Type: application/json, but received: " + request.ContentType);
                 return;
             }
 

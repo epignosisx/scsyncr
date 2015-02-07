@@ -119,6 +119,7 @@ module ScSyncr {
         target: KnockoutObservable<Item> = ko.observable(null);
         sourceDetails: IItemWrapperDto;
         targetDetails: IItemWrapperDto;
+        icon: KnockoutComputed<string>;
         children: KnockoutObservableArray<Node> = ko.observableArray([]);
         childrenLoaded: KnockoutObservable<boolean> = ko.observable(false);
         expanded: KnockoutObservable<boolean> = ko.observable(false);
@@ -147,6 +148,9 @@ module ScSyncr {
             });
             this.name = ko.computed(() => {
                 return this.source() ? this.source().name : this.target().name;
+            });
+            this.icon = ko.computed(() => {
+                return this.source() ? this.source().icon : this.target().icon;
             });
             this.diffDetails(this.getDiffDetails());
             this.diffClass = ko.computed(() => {
@@ -266,17 +270,18 @@ module ScSyncr {
 
         updateContextMenu() {
             var menu = new ContextualMenu();
-            if (this.diffDetails().type != DiffType.Unmodified) {
-                menu.actions.push(new ContextualMenuAction("Sync", this.sync.bind(this), "octicon octicon-git-pull-request", "Applies source item changes to target."));
-                menu.actions.push(new ContextualMenuAction("Sync w/ Children", this.syncWithChildren.bind(this), "octicon octicon-git-pull-request", "Applies source item & children changes to target."));
-            }
+            menu.actions.push(new ContextualMenuAction("Sync", this.sync.bind(this), "octicon octicon-git-pull-request", "Applies source item changes to target."));
+            menu.actions.push(new ContextualMenuAction("Sync Recursive", this.syncWithChildren.bind(this), "octicon octicon-git-pull-request", "Applies source item & children changes to target."));
             MessageBus.current.send("new-contextual-menu", this, menu);
         }
 
         showDetails() {
             //menu
             this.updateContextMenu();
+            this.ensureItemLoaded(true);
+        }
 
+        ensureItemLoaded(refreshViewer: boolean): JQueryPromise<any> {
             //fetch items details
             var mng = ServiceLocator.current.requestManager,
                 srcSvc = ServiceLocator.current.srcSvc,
@@ -290,24 +295,34 @@ module ScSyncr {
                 srcPromise = mng.add(() => srcSvc.getItem(src.id));
                 tgtPromise = mng.add(() => tgtSvc.getItem(tgt.id));
 
-                $.when(srcPromise, tgtPromise).done((source: IItemWrapperDto, target: IItemWrapperDto) => {
+                return $.when(srcPromise, tgtPromise).done((source: IItemWrapperDto, target: IItemWrapperDto) => {
                     this.sourceDetails = source;
                     this.targetDetails = target;
-                    ServiceLocator.current.viewer.show(source, target);
+                    if (refreshViewer) {
+                        ServiceLocator.current.viewer.show(source, target);
+                    }
                 });
-            }else if (src) {
+            } else if (src) {
                 srcPromise = mng.add(() => srcSvc.getItem(src.id));
-                srcPromise.done((source: IItemWrapperDto) => {
+                return srcPromise.done((source: IItemWrapperDto) => {
                     this.sourceDetails = source;
-                    ServiceLocator.current.viewer.show(source, null);
+                    if (refreshViewer) {
+                        ServiceLocator.current.viewer.show(source, null);
+                    }
                 });
-            }else if (tgt) {
+            } else if (tgt) {
                 tgtPromise = mng.add(() => tgtSvc.getItem(tgt.id));
-                tgtPromise.done((target: IItemWrapperDto) => {
+                return tgtPromise.done((target: IItemWrapperDto) => {
                     this.targetDetails = target;
-                    ServiceLocator.current.viewer.show(null, target);
+                    if (refreshViewer) {
+                        ServiceLocator.current.viewer.show(null, target);
+                    }
                 });
             }
+
+            var dfd = $.Deferred();
+            dfd.resolve(true);
+            return dfd.promise();
         }
 
         sync() {
@@ -321,11 +336,13 @@ module ScSyncr {
 
             if (diff.type == DiffType.Add || diff.type == DiffType.Modified) {
                 return mng.add(() => tgtSvc.updateItem(this.sourceDetails)).done((target: IItemWrapperDto) => {
-                    this.target(new Item({ Id: target.Item.ID, Name: target.Item.Name, ParentId: target.Item.ParentID, Hash: target.Hash, Children: null }));
+                    this.target(new Item({ Id: target.Item.ID, Name: target.Item.Name, ParentId: target.Item.ParentID, Hash: target.Hash, Children: null, Icon: null }));
                     this.targetDetails = target;
                     this.diffDetails(this.getDiffDetails());
                     this.updateContextMenu();
-                    ServiceLocator.current.viewer.show(this.sourceDetails, target);
+                    if (shouldRefreshViewer) {
+                        ServiceLocator.current.viewer.show(this.sourceDetails, target);
+                    }
                 });
             }
 
@@ -335,7 +352,9 @@ module ScSyncr {
                     this.targetDetails = null;
                     this.diffDetails(this.getDiffDetails());
                     this.updateContextMenu();
-                    ServiceLocator.current.viewer.show(null, null);
+                    if (shouldRefreshViewer) {
+                        ServiceLocator.current.viewer.show(null, null);
+                    }
                 });
             }
 
@@ -349,12 +368,7 @@ module ScSyncr {
         }
 
         syncChildrenHelper(shouldRefreshViewer: boolean) {
-            var mng = ServiceLocator.current.requestManager,
-                srcSvc = ServiceLocator.current.srcSvc,
-                tgtSvc = ServiceLocator.current.tgtSvc,
-                diff = this.diffDetails();
-
-            this.syncHelper(true).done(this.ensureChildrenLoaded).done(() => {
+            this.ensureItemLoaded().done(() => this.syncHelper(shouldRefreshViewer)).done(this.ensureChildrenLoaded.bind(this)).done(() => {
                 this.children().forEach((child: Node) => {
                     child.syncChildrenHelper(false);
                 });
@@ -367,12 +381,14 @@ module ScSyncr {
         name: string;
         parentId: string;
         hash: string;
+        icon: string;
 
         constructor(data: ITreeItemDto) {
             this.id = data.Id;
             this.name = data.Name;
             this.parentId = data.ParentId;
             this.hash = data.Hash;
+            this.icon = data.Icon;
         }
     }
 
@@ -548,6 +564,7 @@ module ScSyncr {
         Name: string;
         Children: ITreeItemDto[];
         Hash: string;
+        Icon: string;
     }
 
     export interface IItemWrapperDto {
@@ -579,7 +596,7 @@ module ScSyncr {
             return null;
         }
 
-        var treeDto = { Id: currentId.substring(0, 3) + "1", Name: "Node " + currentId + "1", ParentId: currentId, Hash: hash, Children: null };
+        var treeDto = { Id: currentId.substring(0, 3) + "1", Name: "Node " + currentId + "1", ParentId: currentId, Hash: hash, Children: null, Icon: null };
         if (addChildren) {
             treeDto.Children = [];
             for (var i = 0; i < 3; i++) {

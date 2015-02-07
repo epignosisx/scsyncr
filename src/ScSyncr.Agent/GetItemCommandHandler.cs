@@ -4,6 +4,7 @@ using System.Web;
 using Sitecore.Data;
 using Sitecore.Data.Items;
 using Sitecore.Data.Serialization.ObjectModel;
+using Sitecore.Resources;
 using Sitecore.SecurityModel;
 
 namespace ScSyncr.Agent
@@ -33,6 +34,8 @@ namespace ScSyncr.Agent
         public string Name { get; set; }
         public List<TreeItemDto> Children { get; set; }
         public string Hash { get; set; }
+
+        public string Icon { get; set; }
     }
 
     internal class ItemDto
@@ -64,13 +67,14 @@ namespace ScSyncr.Agent
 
     internal static class ItemExtensions
     {
-        public static TreeItemDto MapToTreeItemDto(this Item item, string hash)
+        public static TreeItemDto MapToTreeItemDto(this Item item, string hash, string host)
         {
             var dto = new TreeItemDto();
             dto.Id = item.ID.Guid;
             dto.Name = item.Name;
             dto.ParentId = item.ParentID.Guid;
             dto.Hash = hash;
+            dto.Icon = host + Images.GetThemedImageSource(item.Appearance.Icon);
             return dto;
         }
 
