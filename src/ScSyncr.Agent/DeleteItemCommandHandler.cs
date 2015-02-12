@@ -8,8 +8,10 @@ using Sitecore.SecurityModel;
 
 namespace ScSyncr.Agent
 {
-    internal class RemoveItemCommandHandler : ICommandHandler
+    internal class DeleteItemCommandHandler : ICommandHandler
     {
+        private static readonly object CachedObject = new object();
+        private const string ReferralFoundMessage = "Item {0} - {1} or one of its children has referral links. As a precaution referral links must be deleted before the item.";
         public void Handle(HttpContext context)
         {
             var request = context.Request;
@@ -18,21 +20,46 @@ namespace ScSyncr.Agent
 
             var itemId = request.Form[ParameterKeys.ItemId];
 
+            bool wasDeleted = false;
+            string msg = null;
             using(new ProxyDisabler())
             using (new SecurityDisabler())
             {
                 Item item = db.GetItem(ID.Parse(itemId));
-                if (IsSafeToDelete(item) && item != null)
+                if (item == null)
                 {
-                    if (AgentConfig.RecycleInsteadOfDelete)
+                    wasDeleted = true; //not found, assume it was deleted.
+                }
+                else
+                {
+                    if (IsSafeToDelete(item))
                     {
-                        item.Delete();
+                        if (AgentConfig.RecycleInsteadOfDelete)
+                        {
+                            item.Delete();
+                        }
+                        else
+                        {
+                            item.Recycle();
+                        }
+                        wasDeleted = true;
                     }
                     else
                     {
-                        item.Recycle();
+                        msg = string.Format(ReferralFoundMessage, item.ID, item.Paths.ContentPath);
                     }
                 }
+            }
+
+            if (wasDeleted)
+            {
+                context.Response.WriteJson(CachedObject);
+            }
+            else
+            {
+                context.Response.StatusCode = 400; //Bad Request
+                context.Response.TrySkipIisCustomErrors = true;
+                context.Response.WriteJson(new { Message = msg });
             }
         }
 

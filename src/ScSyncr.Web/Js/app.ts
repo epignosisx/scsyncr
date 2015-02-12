@@ -114,7 +114,7 @@ module ScSyncr {
     }
 
     export class Node {
-
+        parent: Node;
         source: KnockoutObservable<Item> = ko.observable(null);
         target: KnockoutObservable<Item> = ko.observable(null);
         sourceDetails: IItemWrapperDto;
@@ -131,9 +131,10 @@ module ScSyncr {
         syncExcluded: KnockoutObservable<boolean> = ko.observable(false);
         name: KnockoutComputed<string>;
 
-        constructor(source: ITreeItemDto, target: ITreeItemDto) {
+        constructor(source: ITreeItemDto, target: ITreeItemDto, parent: Node) {
             this.source(source ? new Item(source) : null);
             this.target(target ? new Item(target) : null);
+            this.parent = parent;
 
             this.processChildren(source ? source.Children : null, target ? target.Children : null);
 
@@ -163,6 +164,10 @@ module ScSyncr {
             });
         }
 
+        removeChild(child: Node) {
+            this.children.remove(child);
+        }
+
         processChildren(srcChildren: ITreeItemDto[], tgtChildren: ITreeItemDto[]) {
             if (!srcChildren && !tgtChildren) {
                 this.childrenLoaded(false);
@@ -184,9 +189,9 @@ module ScSyncr {
                 for (tgtIdx = tgtLastMatched; tgtIdx < tgtLen; tgtIdx++) {
                     if (srcChildren[srcIdx].Id === tgtChildren[tgtIdx].Id) {
                         while (tgtLastMatched < tgtIdx) {
-                            this.children.push(new Node(null, tgtChildren[tgtLastMatched++]));
+                            this.children.push(new Node(null, tgtChildren[tgtLastMatched++], this));
                         }
-                        this.children.push(new Node(srcChildren[srcIdx], tgtChildren[tgtIdx]));
+                        this.children.push(new Node(srcChildren[srcIdx], tgtChildren[tgtIdx], this));
                         tgtLastMatched = tgtIdx + 1;
                         found = true;
                         break;
@@ -194,8 +199,12 @@ module ScSyncr {
                 }
 
                 if (!found) {
-                    this.children.push(new Node(srcChildren[srcIdx], null));    
+                    this.children.push(new Node(srcChildren[srcIdx], null, this));    
                 }
+            }
+
+            for (; tgtLastMatched < tgtLen; tgtLastMatched++) {
+                this.children.push(new Node(null, tgtChildren[tgtLastMatched], this));
             }
 
             this.childrenLoaded(true);
@@ -348,11 +357,9 @@ module ScSyncr {
 
             if (diff.type == DiffType.Remove) {
                 return mng.add(() => tgtSvc.deleteItem(this.target().id)).done((_) => {
-                    this.target(null);
-                    this.targetDetails = null;
-                    this.diffDetails(this.getDiffDetails());
-                    this.updateContextMenu();
-                    if (shouldRefreshViewer) {
+                    if (this.parent) {
+                        this.parent.removeChild(this);
+                        this.parent.updateContextMenu();
                         ServiceLocator.current.viewer.show(null, null);
                     }
                 });
@@ -368,11 +375,15 @@ module ScSyncr {
         }
 
         syncChildrenHelper(shouldRefreshViewer: boolean) {
-            this.ensureItemLoaded().done(() => this.syncHelper(shouldRefreshViewer)).done(this.ensureChildrenLoaded.bind(this)).done(() => {
-                this.children().forEach((child: Node) => {
-                    child.syncChildrenHelper(false);
+            var self = this;
+            this.ensureItemLoaded(shouldRefreshViewer)
+                .then(() => self.syncHelper(shouldRefreshViewer))
+                .then(() => self.ensureChildrenLoaded())
+                .then(() => {
+                    self.children().forEach((child: Node) => {
+                        child.syncChildrenHelper(false);
+                    });
                 });
-            });
         }
     }
 
@@ -469,7 +480,6 @@ module ScSyncr {
 
         deleteItem(itemId: string): JQueryPromise<any> {
             return $.ajax({
-                contentType: "application/json",
                 type: "POST",
                 url: this.baseUrl + "delete-item?db=" + this.db,
                 data: { itemId: itemId }
@@ -527,7 +537,7 @@ module ScSyncr {
 
     class ServiceLocator {
         viewer: Viewer = new Viewer();
-        requestManager: RequestManager = new RequestManager(2);
+        requestManager: RequestManager = new RequestManager(1);
         srcSvc: IDataService = new DataService();
         tgtSvc: IDataService = new DataService();
 
@@ -642,8 +652,9 @@ module ScSyncr {
         var srcPromise = mgr.add(() => sl.srcSvc.getTreeItem("{11111111-1111-1111-1111-111111111111}"));
         var tgtPromise = mgr.add(() => sl.tgtSvc.getTreeItem("{11111111-1111-1111-1111-111111111111}"));
 
+        $.ajaxSettings.cache = false;
         $.when(srcPromise, tgtPromise).done((srcItem: ITreeItemDto, tgtItem: ITreeItemDto) => {
-            vm.root(new Node(srcItem, tgtItem));
+            vm.root(new Node(srcItem, tgtItem, null));
         });
     })();
 }

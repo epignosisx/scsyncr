@@ -104,7 +104,7 @@ var ScSyncr;
     ScSyncr.DiffDetail = DiffDetail;
 
     var Node = (function () {
-        function Node(source, target) {
+        function Node(source, target, parent) {
             var _this = this;
             this.source = ko.observable(null);
             this.target = ko.observable(null);
@@ -116,6 +116,7 @@ var ScSyncr;
             this.syncExcluded = ko.observable(false);
             this.source(source ? new Item(source) : null);
             this.target(target ? new Item(target) : null);
+            this.parent = parent;
 
             this.processChildren(source ? source.Children : null, target ? target.Children : null);
 
@@ -144,6 +145,10 @@ var ScSyncr;
                 return _this.syncExcluded() ? "Excluded: " + diff.title : diff.title;
             });
         }
+        Node.prototype.removeChild = function (child) {
+            this.children.remove(child);
+        };
+
         Node.prototype.processChildren = function (srcChildren, tgtChildren) {
             if (!srcChildren && !tgtChildren) {
                 this.childrenLoaded(false);
@@ -160,9 +165,9 @@ var ScSyncr;
                 for (tgtIdx = tgtLastMatched; tgtIdx < tgtLen; tgtIdx++) {
                     if (srcChildren[srcIdx].Id === tgtChildren[tgtIdx].Id) {
                         while (tgtLastMatched < tgtIdx) {
-                            this.children.push(new Node(null, tgtChildren[tgtLastMatched++]));
+                            this.children.push(new Node(null, tgtChildren[tgtLastMatched++], this));
                         }
-                        this.children.push(new Node(srcChildren[srcIdx], tgtChildren[tgtIdx]));
+                        this.children.push(new Node(srcChildren[srcIdx], tgtChildren[tgtIdx], this));
                         tgtLastMatched = tgtIdx + 1;
                         found = true;
                         break;
@@ -170,8 +175,12 @@ var ScSyncr;
                 }
 
                 if (!found) {
-                    this.children.push(new Node(srcChildren[srcIdx], null));
+                    this.children.push(new Node(srcChildren[srcIdx], null, this));
                 }
+            }
+
+            for (; tgtLastMatched < tgtLen; tgtLastMatched++) {
+                this.children.push(new Node(null, tgtChildren[tgtLastMatched], this));
             }
 
             this.childrenLoaded(true);
@@ -336,11 +345,9 @@ var ScSyncr;
                 return mng.add(function () {
                     return tgtSvc.deleteItem(_this.target().id);
                 }).done(function (_) {
-                    _this.target(null);
-                    _this.targetDetails = null;
-                    _this.diffDetails(_this.getDiffDetails());
-                    _this.updateContextMenu();
-                    if (shouldRefreshViewer) {
+                    if (_this.parent) {
+                        _this.parent.removeChild(_this);
+                        _this.parent.updateContextMenu();
                         ServiceLocator.current.viewer.show(null, null);
                     }
                 });
@@ -356,11 +363,13 @@ var ScSyncr;
         };
 
         Node.prototype.syncChildrenHelper = function (shouldRefreshViewer) {
-            var _this = this;
-            this.ensureItemLoaded().done(function () {
-                return _this.syncHelper(shouldRefreshViewer);
-            }).done(this.ensureChildrenLoaded.bind(this)).done(function () {
-                _this.children().forEach(function (child) {
+            var self = this;
+            this.ensureItemLoaded(shouldRefreshViewer).then(function () {
+                return self.syncHelper(shouldRefreshViewer);
+            }).then(function () {
+                return self.ensureChildrenLoaded();
+            }).then(function () {
+                self.children().forEach(function (child) {
                     child.syncChildrenHelper(false);
                 });
             });
@@ -450,7 +459,6 @@ var ScSyncr;
 
         DataService.prototype.deleteItem = function (itemId) {
             return $.ajax({
-                contentType: "application/json",
                 type: "POST",
                 url: this.baseUrl + "delete-item?db=" + this.db,
                 data: { itemId: itemId }
@@ -510,7 +518,7 @@ var ScSyncr;
     var ServiceLocator = (function () {
         function ServiceLocator() {
             this.viewer = new Viewer();
-            this.requestManager = new RequestManager(2);
+            this.requestManager = new RequestManager(1);
             this.srcSvc = new DataService();
             this.tgtSvc = new DataService();
         }
@@ -602,8 +610,9 @@ var ScSyncr;
             return sl.tgtSvc.getTreeItem("{11111111-1111-1111-1111-111111111111}");
         });
 
+        $.ajaxSettings.cache = false;
         $.when(srcPromise, tgtPromise).done(function (srcItem, tgtItem) {
-            vm.root(new Node(srcItem, tgtItem));
+            vm.root(new Node(srcItem, tgtItem, null));
         });
     })();
 })(ScSyncr || (ScSyncr = {}));
