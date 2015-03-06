@@ -5,7 +5,8 @@ interface JQuery {
 }
 
 interface KnockoutBindingHandlers {
-    diff
+    diff;
+    compareResults;
 }
 
 ko.bindingHandlers.diff = {
@@ -33,6 +34,16 @@ ko.bindingHandlers.diff = {
         unwrapped.target.subscribe(newValue => {
             $(element).mergely('rhs', newValue ? newValue.Raw : "");
         });
+
+    }
+};
+
+ko.bindingHandlers.compareResults = {
+    init: (element: HTMLElement, valueAccessor, allBindings, viewModel, bindingContext) => {
+        // This will be called when the binding is first applied to an element
+        // Set up any initial state, event handlers, etc. here
+
+        var unwrapped = valueAccessor();
 
     }
 };
@@ -88,6 +99,12 @@ module ScSyncr {
             this.target(target);
         }
     }
+
+    //export class CompareReport {
+    //    private results: KnockoutObservableArray<CompareResult> = ko.observableArray([]);
+
+    //    show(results: )
+    //}
 
     export enum DiffType {
         Remove,
@@ -281,6 +298,7 @@ module ScSyncr {
             var menu = new ContextualMenu();
             menu.actions.push(new ContextualMenuAction("Sync", this.sync.bind(this), "octicon octicon-git-pull-request", "Applies source item changes to target."));
             menu.actions.push(new ContextualMenuAction("Sync Recursive", this.syncWithChildren.bind(this), "octicon octicon-git-pull-request", "Applies source item & children changes to target."));
+            menu.actions.push(new ContextualMenuAction("Compare Recursive", this.compare.bind(this), "fa fa-exchange", "Compares source item & children to target."));
             MessageBus.current.send("new-contextual-menu", this, menu);
         }
 
@@ -384,6 +402,63 @@ module ScSyncr {
                         child.syncChildrenHelper(false);
                     });
                 });
+        }
+
+        compare() {
+            var results = [];
+            this.compareHelper(results).then(() => {
+                console.log(results);
+            });
+        }
+
+        compareHelper(results: CompareResult[]): JQueryPromise<any> {
+            var diff = this.diffDetails();
+
+            if (diff.type != DiffType.Unmodified) {
+                var itemPath = this.getItemPath();
+                var result = new CompareResult(itemPath, diff);
+                results.push(result);
+            }
+
+            var self = this;
+            return this.ensureChildrenLoaded().then(() => {
+                var promises = [];
+                var children = self.children();
+                if (children && children.length) {
+                    self.children().forEach((child: Node) => {
+                        var promise = child.compareHelper(results);
+                        promises.push(promise);
+                    });
+
+                    return $.when.apply($, promises);
+                }
+
+                var dfd = $.Deferred();
+                dfd.resolve(true);
+                return dfd.promise();
+            });
+        }
+
+        getItemPath() {
+            var arr = [];
+            var parent = this.parent;
+            
+            while (parent) {
+                arr.push(parent.name());
+                parent = parent.parent;
+            }
+
+            return "/" + arr.reverse().join("/") + "/" + this.name();
+        }
+    }
+
+    export class CompareResult {
+        itemPath: string;
+        diff: DiffDetail;
+
+        constructor(itemPath: string, diff: DiffDetail) {
+            this.itemPath = itemPath;
+            this.diff = diff;
         }
     }
 
