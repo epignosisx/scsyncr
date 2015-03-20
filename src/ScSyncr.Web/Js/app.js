@@ -410,7 +410,16 @@ var ScSyncr;
                 var children = self.children();
                 if (children && children.length) {
                     self.children().forEach(function (child) {
-                        var promise = child.compareHelper(results);
+                        var tempResults = [];
+                        var promise = child.compareHelper(tempResults).then(function () {
+                            if (tempResults.length) {
+                                Array.prototype.push.apply(results, tempResults);
+                            } else {
+                                //no diffs in children, collapse tree node
+                                console.log("expanded(false)");
+                                child.expanded(false);
+                            }
+                        });
                         promises.push(promise);
                     });
 
@@ -462,6 +471,8 @@ var ScSyncr;
     var RequestManager = (function () {
         function RequestManager(maxConcurrentRequests) {
             this.queue = [];
+            this.ongoingCount = 0;
+            this.maxConcurrentRequests = 1;
             this.maxConcurrentRequests = maxConcurrentRequests;
         }
         RequestManager.prototype.add = function (request) {
@@ -477,6 +488,7 @@ var ScSyncr;
                 return;
             }
 
+            console.log("RequestManager.ongoingCount = " + this.ongoingCount);
             var request = this.queue.pop();
             if (request) {
                 this.ongoingCount++;
@@ -587,7 +599,7 @@ var ScSyncr;
     var ServiceLocator = (function () {
         function ServiceLocator() {
             this.viewer = new Viewer();
-            this.requestManager = new RequestManager(1);
+            this.requestManager = new RequestManager(10);
             this.srcSvc = new DataService();
             this.tgtSvc = new DataService();
         }

@@ -252,7 +252,7 @@ module ScSyncr {
                     this.processChildren(source.Children, target.Children);
                 }).always(() => {
                     this.loadingChildren(false);
-                    this.expanded(true);
+                    this.expanded(true);    
                 });
             } else if (src) {
                 return mng.add(() => srcSvc.getTreeItem(src.id)).done((source) => {
@@ -426,7 +426,16 @@ module ScSyncr {
                 var children = self.children();
                 if (children && children.length) {
                     self.children().forEach((child: Node) => {
-                        var promise = child.compareHelper(results);
+                        var tempResults = [];
+                        var promise = child.compareHelper(tempResults).then(() => {
+                            if (tempResults.length) {
+                                Array.prototype.push.apply(results, tempResults);
+                            } else {
+                                //no diffs in children, collapse tree node
+                                console.log("expanded(false)");
+                                child.expanded(false);
+                            }
+                        });
                         promises.push(promise);
                     });
 
@@ -480,8 +489,8 @@ module ScSyncr {
 
     class RequestManager {
         private queue: Array<{ op: () => JQueryPromise<any>; promise: JQueryDeferred<any>; }> = [];
-        private ongoingCount: number;
-        private maxConcurrentRequests: number;
+        private ongoingCount: number = 0;
+        private maxConcurrentRequests: number = 1;
 
         constructor(maxConcurrentRequests: number) {
             this.maxConcurrentRequests = maxConcurrentRequests;
@@ -499,6 +508,7 @@ module ScSyncr {
                 return;
             }
 
+            console.log("RequestManager.ongoingCount = " + this.ongoingCount);
             var request = this.queue.pop();
             if (request) {
                 this.ongoingCount++;
@@ -612,7 +622,7 @@ module ScSyncr {
 
     class ServiceLocator {
         viewer: Viewer = new Viewer();
-        requestManager: RequestManager = new RequestManager(1);
+        requestManager: RequestManager = new RequestManager(10);
         srcSvc: IDataService = new DataService();
         tgtSvc: IDataService = new DataService();
 
