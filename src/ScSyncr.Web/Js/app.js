@@ -25,11 +25,16 @@ ko.bindingHandlers.diff = {
     }
 };
 
-ko.bindingHandlers.compareResults = {
+ko.bindingHandlers.compareReport = {
     init: function (element, valueAccessor, allBindings, viewModel, bindingContext) {
         // This will be called when the binding is first applied to an element
         // Set up any initial state, event handlers, etc. here
-        var unwrapped = valueAccessor();
+        $(element).modal({ show: false });
+    },
+    update: function (element, valueAccessor, allBindings, viewModel, bindingContext) {
+        ScSyncr.MessageBus.current.listen("compare-results", function (sender, results) {
+            $(element).modal("show");
+        });
     }
 };
 
@@ -89,10 +94,18 @@ var ScSyncr;
     })();
     ScSyncr.Viewer = Viewer;
 
-    //export class CompareReport {
-    //    private results: KnockoutObservableArray<CompareResult> = ko.observableArray([]);
-    //    show(results: )
-    //}
+    var CompareReport = (function () {
+        function CompareReport() {
+            this.results = ko.observableArray([]);
+            MessageBus.current.listen("compare-results", this.show.bind(this));
+        }
+        CompareReport.prototype.show = function (sender, results) {
+            this.results(results);
+        };
+        return CompareReport;
+    })();
+    ScSyncr.CompareReport = CompareReport;
+
     (function (DiffType) {
         DiffType[DiffType["Remove"] = 0] = "Remove";
         DiffType[DiffType["Add"] = 1] = "Add";
@@ -389,9 +402,10 @@ var ScSyncr;
         };
 
         Node.prototype.compare = function () {
+            var _this = this;
             var results = [];
             this.compareHelper(results).then(function () {
-                console.log(results);
+                MessageBus.current.send("compare-results", _this, results);
             });
         };
 
@@ -416,7 +430,6 @@ var ScSyncr;
                                 Array.prototype.push.apply(results, tempResults);
                             } else {
                                 //no diffs in children, collapse tree node
-                                console.log("expanded(false)");
                                 child.expanded(false);
                             }
                         });
@@ -599,6 +612,7 @@ var ScSyncr;
     var ServiceLocator = (function () {
         function ServiceLocator() {
             this.viewer = new Viewer();
+            this.compareReport = new CompareReport();
             this.requestManager = new RequestManager(10);
             this.srcSvc = new DataService();
             this.tgtSvc = new DataService();
@@ -611,6 +625,7 @@ var ScSyncr;
         function ViewModel() {
             this.root = ko.observable();
             this.viewer = ServiceLocator.current.viewer;
+            this.compareReport = ServiceLocator.current.compareReport;
             this.navigation = new Navigation();
             this.sourceEndpoint = ko.observable();
             this.targetEndpoint = ko.observable();

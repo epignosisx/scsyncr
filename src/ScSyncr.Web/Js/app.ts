@@ -2,11 +2,12 @@
 interface JQuery {
     mergely(opts: any): JQuery;
     mergely(method: string, param: any): JQuery;
+    modal(opts?: any): JQuery;
 }
 
 interface KnockoutBindingHandlers {
     diff;
-    compareResults;
+    compareReport;
 }
 
 ko.bindingHandlers.diff = {
@@ -38,13 +39,16 @@ ko.bindingHandlers.diff = {
     }
 };
 
-ko.bindingHandlers.compareResults = {
+ko.bindingHandlers.compareReport = {
     init: (element: HTMLElement, valueAccessor, allBindings, viewModel, bindingContext) => {
         // This will be called when the binding is first applied to an element
         // Set up any initial state, event handlers, etc. here
-
-        var unwrapped = valueAccessor();
-
+        $(element).modal({show:false});
+    },
+    update: (element: HTMLElement, valueAccessor, allBindings, viewModel, bindingContext) => {
+        ScSyncr.MessageBus.current.listen("compare-results", (sender: any, results: ScSyncr.CompareResult[]) => {
+            $(element).modal("show");
+        });
     }
 };
 
@@ -100,11 +104,17 @@ module ScSyncr {
         }
     }
 
-    //export class CompareReport {
-    //    private results: KnockoutObservableArray<CompareResult> = ko.observableArray([]);
+    export class CompareReport {
+        results: KnockoutObservableArray<CompareResult> = ko.observableArray([]);
 
-    //    show(results: )
-    //}
+        constructor() {
+            MessageBus.current.listen("compare-results", this.show.bind(this));
+        }
+
+        show(sender: any, results: CompareResult[]) {
+            this.results(results);
+        }
+    }
 
     export enum DiffType {
         Remove,
@@ -405,9 +415,9 @@ module ScSyncr {
         }
 
         compare() {
-            var results = [];
+            var results: CompareResult[] = [];
             this.compareHelper(results).then(() => {
-                console.log(results);
+                MessageBus.current.send("compare-results", this, results);
             });
         }
 
@@ -432,7 +442,6 @@ module ScSyncr {
                                 Array.prototype.push.apply(results, tempResults);
                             } else {
                                 //no diffs in children, collapse tree node
-                                console.log("expanded(false)");
                                 child.expanded(false);
                             }
                         });
@@ -622,6 +631,7 @@ module ScSyncr {
 
     class ServiceLocator {
         viewer: Viewer = new Viewer();
+        compareReport: CompareReport = new CompareReport();
         requestManager: RequestManager = new RequestManager(10);
         srcSvc: IDataService = new DataService();
         tgtSvc: IDataService = new DataService();
@@ -635,6 +645,7 @@ module ScSyncr {
     export class ViewModel {
         root: KnockoutObservable<Node> = ko.observable<Node>();
         viewer: Viewer = ServiceLocator.current.viewer;
+        compareReport: CompareReport = ServiceLocator.current.compareReport;
         navigation: Navigation = new Navigation();
         sourceEndpoint: KnockoutObservable<string> = ko.observable<string>();
         targetEndpoint: KnockoutObservable<string> = ko.observable<string>();
