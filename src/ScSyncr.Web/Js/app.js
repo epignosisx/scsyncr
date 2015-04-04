@@ -346,7 +346,10 @@ var ScSyncr;
         };
 
         Node.prototype.sync = function () {
-            this.syncHelper(true);
+            ServiceLocator.current.progressIndicator.increment();
+            this.syncHelper(true).always(function () {
+                ServiceLocator.current.progressIndicator.decrement();
+            });
         };
 
         Node.prototype.syncHelper = function (shouldRefreshViewer) {
@@ -385,12 +388,15 @@ var ScSyncr;
         };
 
         Node.prototype.syncWithChildren = function () {
-            this.syncChildrenHelper(true);
+            ServiceLocator.current.progressIndicator.increment();
+            this.syncChildrenHelper(true).always(function () {
+                ServiceLocator.current.progressIndicator.decrement();
+            });
         };
 
         Node.prototype.syncChildrenHelper = function (shouldRefreshViewer) {
             var self = this;
-            this.ensureItemLoaded(shouldRefreshViewer).then(function () {
+            return this.ensureItemLoaded(shouldRefreshViewer).then(function () {
                 return self.syncHelper(shouldRefreshViewer);
             }).then(function () {
                 return self.ensureChildrenLoaded();
@@ -404,8 +410,11 @@ var ScSyncr;
         Node.prototype.compare = function () {
             var _this = this;
             var results = [];
+            ServiceLocator.current.progressIndicator.increment();
             this.compareHelper(results).then(function () {
                 MessageBus.current.send("compare-results", _this, results);
+            }).always(function () {
+                ServiceLocator.current.progressIndicator.decrement();
             });
         };
 
@@ -523,6 +532,21 @@ var ScSyncr;
         return RequestManager;
     })();
 
+    var ProgressIndicator = (function () {
+        function ProgressIndicator() {
+            this.ongoingTasks = ko.observable(0);
+        }
+        ProgressIndicator.prototype.increment = function () {
+            this.ongoingTasks(this.ongoingTasks() + 1);
+        };
+
+        ProgressIndicator.prototype.decrement = function () {
+            this.ongoingTasks(this.ongoingTasks() - 1);
+        };
+        return ProgressIndicator;
+    })();
+    ScSyncr.ProgressIndicator = ProgressIndicator;
+
     var DataService = (function () {
         function DataService() {
         }
@@ -614,6 +638,7 @@ var ScSyncr;
             this.viewer = new Viewer();
             this.compareReport = new CompareReport();
             this.requestManager = new RequestManager(10);
+            this.progressIndicator = new ProgressIndicator();
             this.srcSvc = new DataService();
             this.tgtSvc = new DataService();
         }
@@ -626,6 +651,7 @@ var ScSyncr;
             this.root = ko.observable();
             this.viewer = ServiceLocator.current.viewer;
             this.compareReport = ServiceLocator.current.compareReport;
+            this.progressIndicator = ServiceLocator.current.progressIndicator;
             this.navigation = new Navigation();
             this.sourceEndpoint = ko.observable();
             this.targetEndpoint = ko.observable();

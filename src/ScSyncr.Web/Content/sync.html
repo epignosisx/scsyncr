@@ -95,6 +95,9 @@
 
     <nav class="navbar navbar-inverse navbar-fixed-top contextual-menu">
         <div class="container container-full-width">
+            <ul class="nav navbar-nav navbar-right">
+                <li><a><i class="fa fa-spinner fa-spin" data-bind="css: { 'hidden' : progressIndicator.ongoingTasks() <= 0 }"></i></a></li>
+            </ul>
             <div id="navbar" class="navbar-collapse collapse">
                 <a href="" class="navbar-brand">ScSyncr</a>
                 <ul class="nav navbar-nav" data-bind="foreach: navigation.contextualMenu().actions">
