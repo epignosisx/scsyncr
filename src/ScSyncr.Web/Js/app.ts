@@ -363,7 +363,10 @@ module ScSyncr {
         }
 
         sync() {
-            this.syncHelper(true);
+            ServiceLocator.current.progressIndicator.increment();
+            this.syncHelper(true).always(() => {
+                ServiceLocator.current.progressIndicator.decrement();
+            });
         }
 
         syncHelper(shouldRefreshViewer: boolean) {
@@ -399,12 +402,15 @@ module ScSyncr {
         }
 
         syncWithChildren() {
-            this.syncChildrenHelper(true);
+            ServiceLocator.current.progressIndicator.increment();
+            this.syncChildrenHelper(true).always(() => {
+                ServiceLocator.current.progressIndicator.decrement();
+            });
         }
 
-        syncChildrenHelper(shouldRefreshViewer: boolean) {
+        syncChildrenHelper(shouldRefreshViewer: boolean): JQueryPromise<any> {
             var self = this;
-            this.ensureItemLoaded(shouldRefreshViewer)
+            return this.ensureItemLoaded(shouldRefreshViewer)
                 .then(() => self.syncHelper(shouldRefreshViewer))
                 .then(() => self.ensureChildrenLoaded())
                 .then(() => {
@@ -416,8 +422,11 @@ module ScSyncr {
 
         compare() {
             var results: CompareResult[] = [];
+            ServiceLocator.current.progressIndicator.increment();
             this.compareHelper(results).then(() => {
                 MessageBus.current.send("compare-results", this, results);
+            }).always(() => {
+                ServiceLocator.current.progressIndicator.decrement();
             });
         }
 
@@ -534,6 +543,18 @@ module ScSyncr {
         }
     }
 
+    export class ProgressIndicator {
+        ongoingTasks: KnockoutObservable<number> = ko.observable(0);
+
+        increment() {
+            this.ongoingTasks(this.ongoingTasks() + 1);
+        }
+
+        decrement() {
+            this.ongoingTasks(this.ongoingTasks() - 1);
+        }
+    }
+
     interface IDataService {
         db: string;
         setBaseUrl(baseUrl: string);
@@ -633,6 +654,7 @@ module ScSyncr {
         viewer: Viewer = new Viewer();
         compareReport: CompareReport = new CompareReport();
         requestManager: RequestManager = new RequestManager(10);
+        progressIndicator: ProgressIndicator = new ProgressIndicator();
         srcSvc: IDataService = new DataService();
         tgtSvc: IDataService = new DataService();
 
@@ -646,6 +668,7 @@ module ScSyncr {
         root: KnockoutObservable<Node> = ko.observable<Node>();
         viewer: Viewer = ServiceLocator.current.viewer;
         compareReport: CompareReport = ServiceLocator.current.compareReport;
+        progressIndicator: ProgressIndicator = ServiceLocator.current.progressIndicator;
         navigation: Navigation = new Navigation();
         sourceEndpoint: KnockoutObservable<string> = ko.observable<string>();
         targetEndpoint: KnockoutObservable<string> = ko.observable<string>();

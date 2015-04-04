@@ -13,7 +13,8 @@ namespace ScSyncr.Agent
             { "get-item", new GetItemCommandHandler() },
             { "get-tree-item", new GetTreeItemCommandHandler() },
             { "update-item", new UpdateItemCommandHandler() },
-            { "delete-item", new DeleteItemCommandHandler() }
+            { "delete-item", new DeleteItemCommandHandler() },
+            { "get-history", new GetHistoryCommandHandler() }
         };
 
         private readonly RequestContext _requestContext;

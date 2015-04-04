@@ -20,6 +20,10 @@
             padding-left: 35px;
             padding-right: 35px;
         }
+
+        .small-text {
+            margin-top: 100px;
+        }
     </style>
 </head>
 <body>
@@ -31,7 +35,7 @@
     </div>
 
     <div class="container">
-        <form class="form" method="GET" action="sync.html">
+        <form class="form" method="GET" id="sync-form" action="sync.html">
 
             <div class="row">
                 <div class="col-sm-2"></div>
@@ -71,10 +75,32 @@
             </div>
 
             <div class="row actions text-center">
-                <button type="submit" class="btn btn-primary">Start</button>
+                <button type="submit" class="btn btn-primary js-tree">Tree Based Sync</button>
+                <button type="submit" class="btn btn-primary js-history">History Based Sync</button>
+            </div>
+            
+            <div class="row actions small-text">
+                <p>Please note that this tool is not a replacement for a Prod refresh. However, it is useful when you already have changes that you do not want to lose with a refresh. Note that the unit of sync is the Item. If an item has been modified in the source and target, the target item will be overriden with the source item.</p>
+                <p><strong>Tree Based Sync:</strong> best when you just want to grab a part of the tree and just move the changes. Ex: you got latest from Main TFS and want to update app resources of BE, then just sync the entire AppResources/BookingEngine node.</p>
+                <p><strong>History Based Sync:</strong> best when the changes between source and target have very few changes between them. Ex: you are doing a parallel dbs deployment.</p>
             </div>
         </form>
     </div>
-
+    
+    <script>
+        (function() {
+            var form = document.getElementById("sync-form");
+            var btns = document.getElementsByClassName("btn-primary");
+            for (var i = 0; i < btns.length; i++) {
+                btns[i].addEventListener("click", function (ev) {
+                    if (this.className.indexOf("js-tree") >= 0) {
+                        form.action = "sync.html";
+                    } else if (this.className.indexOf("js-history") >= 0) {
+                        form.action = "history.html";
+                    }
+                }, false);
+            }
+        })();
+    </script>
 </body>
 </html>
