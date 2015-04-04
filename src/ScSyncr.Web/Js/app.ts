@@ -105,7 +105,7 @@ module ScSyncr {
     }
 
     export class CompareReport {
-        results: KnockoutObservableArray<CompareResult> = ko.observableArray([]);
+        results: KnockoutObservableArray<CompareResult> = ko.observableArray<CompareResult>([]);
 
         constructor() {
             MessageBus.current.listen("compare-results", this.show.bind(this));
@@ -147,7 +147,7 @@ module ScSyncr {
         sourceDetails: IItemWrapperDto;
         targetDetails: IItemWrapperDto;
         icon: KnockoutComputed<string>;
-        children: KnockoutObservableArray<Node> = ko.observableArray([]);
+        children: KnockoutObservableArray<Node> = ko.observableArray<Node>([]);
         childrenLoaded: KnockoutObservable<boolean> = ko.observable(false);
         expanded: KnockoutObservable<boolean> = ko.observable(false);
         loadingChildren: KnockoutObservable<boolean> = ko.observable(false);
