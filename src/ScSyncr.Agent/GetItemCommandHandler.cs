@@ -20,6 +20,14 @@ namespace ScSyncr.Agent
             {
                 var db = Sitecore.Configuration.Factory.GetDatabase(database);
                 Item item = db.GetItem(new ID(id));
+                if (item == null)
+                {
+                    context.Response.TrySkipIisCustomErrors = true;
+                    context.Response.StatusCode = 404;
+                    context.Response.StatusDescription = "Item not found";
+                    context.Response.Write("Item not found");
+                    return;
+                }
 
                 SyncItem seri = Sitecore.Data.Serialization.ItemSynchronization.BuildSyncItem(item);
                 context.Response.WriteSyncItem(seri);

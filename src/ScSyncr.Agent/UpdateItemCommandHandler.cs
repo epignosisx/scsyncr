@@ -30,6 +30,7 @@ namespace ScSyncr.Agent
             string postBody = request.ContentEncoding.GetString(rawBody);
 
             JavaScriptSerializer serializer = new JavaScriptSerializer();
+            serializer.MaxJsonLength = int.MaxValue/2;
             ItemDto itemDto = serializer.Deserialize<ItemDto>(postBody);
 
             SyncItem syncItem;
@@ -41,7 +42,7 @@ namespace ScSyncr.Agent
             Item item = null;
             using (new SecurityDisabler())
             {
-                ItemSynchronization.PasteSyncItem(syncItem, new LoadOptions {Database = db, ForceUpdate = true});
+                ItemSynchronization.PasteSyncItem(syncItem, new LoadOptions {Database = db, ForceUpdate = true}, failOnDataInconsistency: true);
                 item = db.GetItem(syncItem.ID);
             }
 

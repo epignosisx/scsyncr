@@ -2,10 +2,11 @@ namespace ScSyncr.Agent
 {
     internal static class ParameterKeys
     {
-        internal static readonly string Db = "db";
-        internal static readonly string ItemId = "itemId";
-        internal static readonly string OutputFormat = "of";
-        internal static readonly string FromDate = "fd";
-        internal static readonly string ToDate = "td";
+        internal const string Db = "db";
+        internal const string ItemId = "itemId";
+        internal const string Force = "force";
+        internal const string OutputFormat = "of";
+        internal const string FromDate = "fd";
+        internal const string ToDate = "td";
     }
 }

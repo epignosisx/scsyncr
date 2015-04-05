@@ -57,6 +57,12 @@ namespace ScSyncr.Agent
                             sb.Clear();
                             Utils.SerializeSyncItem(seri, sb);
                             dto.Hash = Utils.Md5Hash(sb.ToString());
+                            dto.Path = item.Paths.ContentPath;
+                            dto.ParentId = item.ParentID.Guid.ToString();
+                        }
+                        else
+                        {
+                            dto.Action = "D";
                         }
 
                         modifiedItems.Add(entry.ItemId, dto);
@@ -71,6 +77,8 @@ namespace ScSyncr.Agent
     internal class HistoryEntryDto
     {
         public string ItemId { get; set; }
+        public string ParentId { get; set; }
+        public string Path { get; set; }
         public string Action { get; set; }
         public string Hash { get; set; }
     }

@@ -47,6 +47,7 @@ namespace ScSyncr.Agent
                     }
                     else
                     {
+                        context.Response.TrySkipIisCustomErrors = true;
                         context.Response.StatusCode = 404;
                         context.Response.Write("Unknown command");
                     }                    

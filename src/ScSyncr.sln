@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScSyncr.Web", "ScSyncr.Web\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScSyncr.Agent", "ScSyncr.Agent\ScSyncr.Agent.csproj", "{0E48E446-D47B-42DA-9652-22A79239A12C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScSyncr.Console", "ScSyncr.Console\ScSyncr.Console.csproj", "{335183C2-4CA9-48EC-BAA1-5007050CDBED}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{0E48E446-D47B-42DA-9652-22A79239A12C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0E48E446-D47B-42DA-9652-22A79239A12C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0E48E446-D47B-42DA-9652-22A79239A12C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{335183C2-4CA9-48EC-BAA1-5007050CDBED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{335183C2-4CA9-48EC-BAA1-5007050CDBED}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{335183C2-4CA9-48EC-BAA1-5007050CDBED}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{335183C2-4CA9-48EC-BAA1-5007050CDBED}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

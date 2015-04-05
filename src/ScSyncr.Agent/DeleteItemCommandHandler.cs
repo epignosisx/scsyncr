@@ -12,13 +12,15 @@ namespace ScSyncr.Agent
     {
         private static readonly object CachedObject = new object();
         private const string ReferralFoundMessage = "Item {0} - {1} or one of its children has referral links. As a precaution referral links must be deleted before the item.";
+        
         public void Handle(HttpContext context)
         {
             var request = context.Request;
             string dbName = request.QueryString[ParameterKeys.Db];
             var db = Factory.GetDatabase(dbName, assert: true);
 
-            var itemId = request.Form[ParameterKeys.ItemId];
+            string itemId = request.Form[ParameterKeys.ItemId];
+            bool force = request.Form[ParameterKeys.Force] == "1";
 
             bool wasDeleted = false;
             string msg = null;
@@ -32,7 +34,7 @@ namespace ScSyncr.Agent
                 }
                 else
                 {
-                    if (IsSafeToDelete(item))
+                    if (IsSafeToDelete(item) || force)
                     {
                         if (AgentConfig.RecycleInsteadOfDelete)
                         {
