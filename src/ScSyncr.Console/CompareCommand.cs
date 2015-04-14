@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
@@ -13,6 +14,12 @@ namespace ScSyncr.Console
         private const string ModifiedAction = "M";
 
         private const int MaxConcurrentRequests = 10;
+        private readonly IOutputWriter _outputWriter;
+
+        public CompareCommand(IOutputWriter outputWriter)
+        {
+            _outputWriter = outputWriter;
+        }
 
         public int Execute(CompareOptions options)
         {
@@ -25,24 +32,24 @@ namespace ScSyncr.Console
                 throw new ArgumentNullException("options");
 
             //get source history
-            System.Console.WriteLine("Fetching source history...");
+            _outputWriter.WriteLine("Fetching source history...");
             string sourceResponse = await FetchHistory(options);
             
             JavaScriptSerializer serializer = new JavaScriptSerializer();
             serializer.MaxJsonLength = int.MaxValue/2;
             List<HistoryEntryDto> sourceEntries = serializer.Deserialize<List<HistoryEntryDto>>(sourceResponse);
-            System.Console.WriteLine("History entries found: " + sourceEntries);
+            _outputWriter.WriteLine("History entries found: " + sourceEntries.Count);
             
             if (sourceEntries.Count == 0)
             {
-                System.Console.WriteLine("No changes to sync");    
+                _outputWriter.WriteLine("No changes to sync");
                 return 0;
             }
 
             //fetching target items to compare if sync is necessary. Doing parallel requests with a max
-            System.Console.WriteLine("Fetching target items");
-            List<Task<ItemFetchResult>> requests = new List<Task<ItemFetchResult>>(sourceEntries.Count);
-            List<Task<ItemFetchResult>> completed = new List<Task<ItemFetchResult>>(sourceEntries.Count);
+            _outputWriter.WriteLine("Fetching target items");
+            var requests = new List<Task<ItemFetchResult>>(sourceEntries.Count);
+            var completed = new List<Task<ItemFetchResult>>(sourceEntries.Count);
 
             foreach (var entry in sourceEntries)
             {
@@ -53,29 +60,28 @@ namespace ScSyncr.Console
                     completed.Add(completedTask);
                 }
 
-                Task<ItemFetchResult> task = FetchItemFromHistory(options.SourceUrl, options.Database, entry);
+                Task<ItemFetchResult> task = FetchItemFromHistory(options.TargetUrl, options.Database, entry);
                 requests.Add(task);
             }
             await Task.WhenAll(requests);
             completed.AddRange(requests);
 
             //show results and sync if requested
-            foreach (var completedTask in completed)
+            foreach (var result in completed.Select(n => n.Result).OrderBy(n => n.HistoryEntry.CreatedOn))
             {
-                var result = completedTask.Result;
                 if (result.TargetAction == TargetAction.Unknown)
                 {
                     using (new ColorSwitcher(ConsoleColor.Red))
                     {
-                        System.Console.WriteLine("! {0} - {1}", result.HistoryEntry.ItemId, result.HistoryEntry.Path);
-                        System.Console.WriteLine(options.Verbose ? result.Exception.ToString() : result.Exception.Message);    
+                        _outputWriter.WriteLine("! {0} - {1}", result.HistoryEntry.ItemId, result.HistoryEntry.Path);
+                        _outputWriter.WriteLine(options.Verbose ? result.Exception.ToString() : result.Exception.Message);    
                     }
                 }
                 else if (result.TargetAction == TargetAction.Add)
                 {
                     using (new ColorSwitcher(ConsoleColor.DarkGreen))
                     {
-                        System.Console.WriteLine("+ {0} - {1}", result.HistoryEntry.ItemId, result.HistoryEntry.Path);
+                        _outputWriter.WriteLine("+ {0} - {1}", result.HistoryEntry.ItemId, result.HistoryEntry.Path);
                         if (options.Sync)
                         {
                             AddItem(options, result.HistoryEntry);
@@ -86,7 +92,7 @@ namespace ScSyncr.Console
                 {
                     using (new ColorSwitcher(ConsoleColor.DarkRed))
                     {
-                        System.Console.WriteLine("- {0} - {1}", result.HistoryEntry.ItemId, result.HistoryEntry.Path);
+                        _outputWriter.WriteLine("- {0} - {1}", result.HistoryEntry.ItemId, result.HistoryEntry.Path);
                         if (options.Sync)
                         {
                             DeleteItem(options.Database, options.TargetUrl, result.HistoryEntry.ItemId, options.Verbose);
@@ -97,7 +103,7 @@ namespace ScSyncr.Console
                 {
                     using (new ColorSwitcher(ConsoleColor.DarkCyan))
                     {
-                        System.Console.WriteLine("* {0} - {1}", result.HistoryEntry.ItemId, result.HistoryEntry.Path);
+                        _outputWriter.WriteLine("* {0} - {1}", result.HistoryEntry.ItemId, result.HistoryEntry.Path);
                         if (options.Sync)
                         {
                             GetAndUpdate(options, result);
@@ -106,36 +112,36 @@ namespace ScSyncr.Console
                 }
                 else if (options.Verbose && result.TargetAction == TargetAction.None)
                 {
-                    System.Console.WriteLine("= {0} - {1}", result.HistoryEntry.ItemId, result.HistoryEntry.Path);
+                    _outputWriter.WriteLine("= {0} - {1}", result.HistoryEntry.ItemId, result.HistoryEntry.Path);
                 }
             }
 
             return 0;
         }
 
-        private static void GetAndUpdate(CompareOptions options, ItemFetchResult result)
+        private void GetAndUpdate(CompareOptions options, ItemFetchResult result)
         {
             ItemFetchResult sourceItem = FetchItem(options.SourceUrl, options.Database, result.HistoryEntry.ItemId).Result;
             if (sourceItem.Found)
             {
                 bool success = UpdateItem(options.TargetUrl, options.Database, sourceItem.ItemDto, options.Verbose);
                 if(success)
-                    System.Console.WriteLine("Synched");
+                    _outputWriter.WriteLine("Synched");
             }
             else
             {
                 using (new ColorSwitcher(ConsoleColor.Red))
-                    System.Console.Error.WriteLine("Source item " + result.HistoryEntry.ItemId + " not found");
+                    _outputWriter.WriteLine("Source item " + result.HistoryEntry.ItemId + " not found");
             }
         }
 
-        private static void AddItem(CompareOptions options, HistoryEntryDto historyEntry)
+        private void AddItem(CompareOptions options, HistoryEntryDto historyEntry)
         {
             var source = FetchItem(options.SourceUrl, options.Database, historyEntry.ItemId).Result;
             if (!source.Found)
             {
                 using(new ColorSwitcher(ConsoleColor.Red))
-                    System.Console.Error.WriteLine("Source item " + historyEntry.ItemId + " not found");
+                    _outputWriter.WriteLine("Source item " + historyEntry.ItemId + " not found");
                 return;
             }
 
@@ -149,7 +155,7 @@ namespace ScSyncr.Console
                 if (!source.Found)
                 {
                     using (new ColorSwitcher(ConsoleColor.Red))
-                        System.Console.Error.WriteLine("Source item " + historyEntry.ParentId + " not found");
+                        _outputWriter.WriteLine("Source item " + historyEntry.ParentId + " not found");
                     return;
                 }
                 
@@ -165,15 +171,15 @@ namespace ScSyncr.Console
                     return;
             }
 
-            System.Console.WriteLine("Synched");
+            _outputWriter.WriteLine("Synched");
         }
 
-        private static bool UpdateItem(Uri sitecoreUri, string database, ItemDto item, bool verbose)
+        private bool UpdateItem(Uri sitecoreUri, string database, ItemDto item, bool verbose)
         {
             //ensure parent exists
             UriBuilder builder = new UriBuilder(sitecoreUri);
             builder.Path = "/scsyncr/update-item";
-            builder.Query = string.Format("?db={0}", Uri.EscapeDataString(database));
+            builder.Query = string.Format("db={0}", Uri.EscapeDataString(database));
             
             JavaScriptSerializer serializer = new JavaScriptSerializer();
             serializer.MaxJsonLength = int.MaxValue/2;
@@ -190,29 +196,29 @@ namespace ScSyncr.Console
                 catch (Exception ex)
                 {
                     using (new ColorSwitcher(ConsoleColor.Red))
-                        System.Console.WriteLine(verbose ? ex.ToString() : ex.Message);
+                        _outputWriter.WriteLine(verbose ? ex.ToString() : ex.Message);
                     return false;
                 }
             }
         }
 
-        private static void DeleteItem(string database, Uri sitecoreUri, string itemId, bool verbose)
+        private void DeleteItem(string database, Uri sitecoreUri, string itemId, bool verbose)
         {
             UriBuilder builder = new UriBuilder(sitecoreUri);
             builder.Path = "/scsyncr/delete-item";
-            builder.Query = string.Format("?db={0}", Uri.EscapeDataString(database));
+            builder.Query = string.Format("db={0}", Uri.EscapeDataString(database));
 
             using (WebClient webClient = new WebClient())
             {
                 try
                 {
                     string response = webClient.UploadString(builder.Uri, "POST", "itemId=" + Uri.EscapeDataString(itemId) + "&force=1");
-                    System.Console.WriteLine("Synched");
+                    _outputWriter.WriteLine("Synched");
                 }
                 catch (Exception ex)
                 {
                     using(new ColorSwitcher(ConsoleColor.Red))
-                        System.Console.WriteLine(verbose ? ex.ToString() : ex.Message);
+                        _outputWriter.WriteLine(verbose ? ex.ToString() : ex.Message);
                 }
             }
         }
@@ -231,7 +237,7 @@ namespace ScSyncr.Console
         {
             UriBuilder builder = new UriBuilder(sitecoreUri);
             builder.Path = "/scsyncr/get-item";
-            builder.Query = string.Format("?db={0}&itemId={1}", Uri.EscapeDataString(database), Uri.EscapeDataString(itemId));
+            builder.Query = string.Format("db={0}&itemId={1}", Uri.EscapeDataString(database), Uri.EscapeDataString(itemId));
             
 
             using (WebClient webClient = new WebClient())
@@ -253,7 +259,7 @@ namespace ScSyncr.Console
                     if (ex.Status == WebExceptionStatus.ProtocolError)
                     {
                         var response = ex.Response as HttpWebResponse;
-                        if (response.StatusCode == HttpStatusCode.NotFound && response.StatusDescription == "ItemDto not found")
+                        if (response.StatusCode == HttpStatusCode.NotFound && response.StatusDescription == "Item not found")
                         {
                             return result;
                         }
@@ -276,7 +282,7 @@ namespace ScSyncr.Console
         {
             UriBuilder builder = new UriBuilder(options.SourceUrl);
             builder.Path = "/scsyncr/get-history";
-            builder.Query = string.Format("?db={0}&fd={1:s}&td={2:s}", Uri.EscapeDataString(options.Database), options.From, options.To);
+            builder.Query = string.Format("db={0}&fd={1:s}&td={2:s}", Uri.EscapeDataString(options.Database), options.From, options.To);
 
             using (WebClient webClient = new WebClient())
             {
@@ -291,6 +297,7 @@ namespace ScSyncr.Console
             public string Path { get; set; }
             public string Action { get; set; }
             public string Hash { get; set; }
+            public DateTime CreatedOn { get; set; }
         }
 
         internal class ItemDto

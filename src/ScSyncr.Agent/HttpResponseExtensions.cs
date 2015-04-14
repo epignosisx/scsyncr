@@ -20,6 +20,7 @@ namespace ScSyncr.Agent
             };
 
             var jsSerializer = new JavaScriptSerializer();
+            jsSerializer.MaxJsonLength = int.MaxValue;
             string content = jsSerializer.Serialize(dto);
 
             response.ContentType = "application/json";
@@ -29,6 +30,7 @@ namespace ScSyncr.Agent
         public static void WriteJson(this HttpResponse response, object obj)
         {
             var jsSerializer = new JavaScriptSerializer();
+            jsSerializer.MaxJsonLength = int.MaxValue;
             string content = jsSerializer.Serialize(obj);
             response.ContentType = "application/json";
             response.Write(content);

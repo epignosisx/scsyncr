@@ -1,4 +1,6 @@
-﻿using System.Globalization;
+﻿using System;
+using System.Globalization;
+using System.IO;
 using System.Reflection;
 using ScSyncr.Console.CommandLine;
 
@@ -22,8 +24,9 @@ namespace ScSyncr.Console
             CommandOption fromDateOption = app.Option("--from <FROM_DATE>", "Use Format: " + dateFormat, CommandOptionType.SingleValue);
             CommandOption toDateOption = app.Option("--to <TO_DATE>", "Use Format: " + dateFormat, CommandOptionType.SingleValue);
             CommandOption hoursOption = app.Option("--hours <HOURS>", "Hours to go back in history from now", CommandOptionType.SingleValue);
-            CommandOption syncOption = app.Option("--sync", "Syncs source changes to target", CommandOptionType.NoValue);
-            CommandOption verboseOption = app.Option("--verbose", "See detailed output", CommandOptionType.NoValue);
+            CommandOption syncOption = app.Option("--sync", "Syncs source changes to target (optional)", CommandOptionType.NoValue);
+            CommandOption verboseOption = app.Option("--verbose", "See detailed output (optional)", CommandOptionType.NoValue);
+            CommandOption outputOption = app.Option("--output <OUTPUT_FILE>", "Output file (optional)", CommandOptionType.SingleValue);
 
             // Show help information if no subcommand/option was specified
             app.OnExecute(() =>
@@ -43,9 +46,12 @@ namespace ScSyncr.Console
                         fromDateOption.Value(), toDateOption.Value(), hoursOption.Value(),
                         syncOption.HasValue(), verboseOption.HasValue(), out options))
                     {
-                        var command = new CompareCommand();
-                        var result = command.Execute(options);
-                        return result;
+                        using (var writer = GetOutputWriter(outputOption.Value()))
+                        {
+                            var command = new CompareCommand(writer);
+                            var result = command.Execute(options);
+                            return result;
+                        }
                     }
                     return -1;
                 });
@@ -63,5 +69,24 @@ namespace ScSyncr.Console
             return assemblyInformationalVersionAttribute.Version;
         }
 
+        private static IOutputWriter GetOutputWriter(string outputFilePath)
+        {
+            if(string.IsNullOrEmpty(outputFilePath))
+                return new ConsoleOutputWriter();
+
+            string dir = Path.GetDirectoryName(outputFilePath);
+
+            if (string.IsNullOrEmpty(dir))
+            {
+                outputFilePath = Path.Combine(Environment.CurrentDirectory, outputFilePath);
+            }
+            else
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            System.Console.WriteLine("Writing output to: " + outputFilePath);
+            return new ConsoleFileOutputWriter(outputFilePath);
+        }
     }
 }

@@ -49,6 +49,11 @@
     <Compile Include="CommandLine\CommandOptionType.cs" />
     <Compile Include="CompareCommand.cs" />
     <Compile Include="CompareOptions.cs" />
+    <Compile Include="ConsoleFileOutputWriter.cs" />
+    <Compile Include="ConsoleOutputWriter.cs" />
+    <Compile Include="FileOutputWriter.cs" />
+    <Compile Include="IOutputWriter.cs" />
+    <Compile Include="OutputWriterExtensions.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

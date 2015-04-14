@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Web;
+using System.Web.Script.Serialization;
 using Sitecore.Collections;
 using Sitecore.Data;
 using Sitecore.Data.Engines;
@@ -50,6 +51,7 @@ namespace ScSyncr.Agent
                         var dto = new HistoryEntryDto();
                         dto.ItemId = entry.ItemId.ToString();
                         dto.Action = HistoryActionMapping[entry.Action];
+                        dto.CreatedOn = entry.Created;
                         var item = db.GetItem(entry.ItemId);
                         if (item != null)
                         {
@@ -69,7 +71,7 @@ namespace ScSyncr.Agent
                     }
                 }
 
-                context.Response.WriteJson(modifiedItems.Values);
+                context.Response.WriteJson(modifiedItems.Values.OrderBy(n => n.CreatedOn).ToList());
             }
         }
     }
@@ -81,5 +83,6 @@ namespace ScSyncr.Agent
         public string Path { get; set; }
         public string Action { get; set; }
         public string Hash { get; set; }
+        public DateTime CreatedOn { get; set; }
     }
 }
