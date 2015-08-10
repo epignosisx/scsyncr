@@ -86,8 +86,13 @@
             color:blue;
         }
 
+        .compare-report ul{
+            padding:0;
+        }
+
         .compare-report li{
             list-style:none;
+            word-break: break-word;
         }
     </style>
 </head>
@@ -148,7 +153,7 @@
 
 
     <div class="modal fade compare-report" tabindex="-1" role="dialog" aria-hidden="true" data-bind="compareReport: compareReport">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>

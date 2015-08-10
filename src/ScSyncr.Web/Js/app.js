@@ -183,17 +183,15 @@ var ScSyncr;
             srcChildren = srcChildren || [];
             tgtChildren = tgtChildren || [];
 
-            var srcIdx = 0, tgtIdx = 0, tgtLastMatched = 0, srcLen = srcChildren.length, tgtLen = tgtChildren.length;
+            var srcIdx = 0, tgtIdx = 0, srcLen = srcChildren.length, tgtLen = tgtChildren.length;
 
+            var foundTgtIdxs = [];
             for (; srcIdx < srcLen; srcIdx++) {
                 var found = false;
-                for (tgtIdx = tgtLastMatched; tgtIdx < tgtLen; tgtIdx++) {
+                for (tgtIdx = 0; tgtIdx < tgtLen; tgtIdx++) {
                     if (srcChildren[srcIdx].Id === tgtChildren[tgtIdx].Id) {
-                        while (tgtLastMatched < tgtIdx) {
-                            this.children.push(new Node(null, tgtChildren[tgtLastMatched++], this));
-                        }
+                        foundTgtIdxs.push(tgtIdx);
                         this.children.push(new Node(srcChildren[srcIdx], tgtChildren[tgtIdx], this));
-                        tgtLastMatched = tgtIdx + 1;
                         found = true;
                         break;
                     }
@@ -204,8 +202,10 @@ var ScSyncr;
                 }
             }
 
-            for (; tgtLastMatched < tgtLen; tgtLastMatched++) {
-                this.children.push(new Node(null, tgtChildren[tgtLastMatched], this));
+            for (tgtIdx = 0; tgtIdx < tgtLen; tgtIdx++) {
+                if (foundTgtIdxs.indexOf(tgtIdx) < 0) {
+                    this.children.push(new Node(null, tgtChildren[tgtIdx], this));
+                }
             }
 
             this.childrenLoaded(true);
