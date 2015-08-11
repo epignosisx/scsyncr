@@ -1,10 +1,12 @@
 ﻿using System;
+using System.Linq;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using Sitecore.Data.Items;
 using Sitecore.Data.Serialization.ObjectModel;
 using Sitecore.Data;
+using System.Collections.Generic;
 
 namespace ScSyncr.Agent
 {
@@ -25,6 +27,35 @@ namespace ScSyncr.Agent
                 syncItem.Serialize(writer);
             }
             return sb;
+        }
+
+        public static SyncItem GetLatestVersions(SyncItem syncItem)
+        {
+            SyncItem latestSeri = new SyncItem();
+            latestSeri.ID = syncItem.ID;
+            latestSeri.DatabaseName = syncItem.DatabaseName;
+            latestSeri.ItemPath = syncItem.ItemPath;
+            latestSeri.ParentID = syncItem.ParentID;
+            latestSeri.Name = syncItem.Name;
+            latestSeri.MasterID = syncItem.MasterID;
+            latestSeri.TemplateID = syncItem.TemplateID;
+            latestSeri.TemplateName = syncItem.TemplateName;
+            latestSeri.BranchId = syncItem.BranchId;
+
+            List<SyncVersion> latestVersions = syncItem.GetLatestVersions().ToList();
+            foreach (var ver in latestVersions)
+            {
+                ver.Revision = "1";
+                ver.Version = "1";
+                var fieldsToExclude = ver.Fields.Where(n => n.FieldName.StartsWith("__")).ToList();
+                foreach (var fieldToExclude in fieldsToExclude)
+                {
+                    ver.RemoveField(fieldToExclude.FieldName);
+                }
+
+                latestSeri.Versions.Add(ver);
+            }
+            return latestSeri;
         }
 
         //from:https://briancaos.wordpress.com/2011/01/14/create-and-publish-items-in-sitecore/

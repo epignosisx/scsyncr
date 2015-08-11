@@ -8,5 +8,6 @@ namespace ScSyncr.Agent
         internal const string OutputFormat = "of";
         internal const string FromDate = "fd";
         internal const string ToDate = "td";
+        internal const string LatestVersionComparison = "lv";
     }
 }

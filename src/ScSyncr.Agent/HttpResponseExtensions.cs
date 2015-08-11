@@ -8,15 +8,19 @@ namespace ScSyncr.Agent
 {
     internal static class HttpResponseExtensions
     {
-        public static void WriteSyncItem(this HttpResponse response, SyncItem syncItem)
+        public static void WriteSyncItem(this HttpResponse response, SyncItem syncItem, SyncItem latestSyncItem)
         {
             StringBuilder sb = Utils.SerializeSyncItem(syncItem);
-            string value = sb.ToString();
+            string rawValue = sb.ToString();
+            sb.Clear();
+            string latestValue = Utils.SerializeSyncItem(latestSyncItem, sb).ToString();
             var dto = new ItemDto
             {
                 Item = syncItem,
-                Raw = value,
-                Hash = Utils.Md5Hash(value)
+                Raw = rawValue,
+                Hash = Utils.Md5Hash(rawValue),
+                LatestVersionRaw = latestValue,
+                LatestVersionHash = Utils.Md5Hash(latestValue)
             };
 
             var jsSerializer = new JavaScriptSerializer();

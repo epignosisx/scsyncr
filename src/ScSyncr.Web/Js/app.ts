@@ -17,23 +17,24 @@ ko.bindingHandlers.diff = {
 
         var unwrapped = valueAccessor(),
             source = unwrapped.source(),
-            target = unwrapped.target();
+            target = unwrapped.target(),
+            propName = window.location.search.indexOf("lv=1") >= 0 ? "LatestVersionRaw" : "Raw";
 
         $(element).mergely({
             cmsettings: { readOnly: true },
             lhs: (setValue) => {
-                setValue(source ? source.Raw : "");
+                setValue(source ? source[propName] : "");
             },
             rhs: (setValue) => {
-                setValue(target ? target.Raw : "");
+                setValue(target ? target[propName] : "");
             }
         });
 
         unwrapped.source.subscribe(newValue => {
-            $(element).mergely('lhs', newValue ? newValue.Raw : "");
+            $(element).mergely('lhs', newValue ? newValue[propName] : "");
         });
         unwrapped.target.subscribe(newValue => {
-            $(element).mergely('rhs', newValue ? newValue.Raw : "");
+            $(element).mergely('rhs', newValue ? newValue[propName] : "");
         });
 
     }
@@ -291,12 +292,16 @@ module ScSyncr {
 
         getDiffDetails(): DiffDetail {
             var src = this.source(),
-                tgt = this.target();
+                tgt = this.target(),
+                latestVersion = ServiceLocator.current.showLatestVersion;
+
             if (!src) {
                 return DiffDetail.remove;
             } else if (!tgt) {
                 return DiffDetail.add;
-            } else if(src.hash == tgt.hash) {
+            } else if (latestVersion && src.latestVersionHash == tgt.latestVersionHash) {
+                return DiffDetail.unmodified;
+            } else if (!latestVersion && src.hash == tgt.hash) {
                 return DiffDetail.unmodified;
             }
             return DiffDetail.modified;
@@ -374,7 +379,7 @@ module ScSyncr {
 
             if (diff.type == DiffType.Add || diff.type == DiffType.Modified) {
                 return mng.add(() => tgtSvc.updateItem(this.sourceDetails)).done((target: IItemWrapperDto) => {
-                    this.target(new Item({ Id: target.Item.ID, Name: target.Item.Name, ParentId: target.Item.ParentID, Hash: target.Hash, Children: null, Icon: null }));
+                    this.target(new Item({ Id: target.Item.ID, Name: target.Item.Name, ParentId: target.Item.ParentID, Hash: target.Hash, LatestVersionHash: target.LatestVersionHash, Children: null, Icon: null }));
                     this.targetDetails = target;
                     this.diffDetails(this.getDiffDetails());
                     this.updateContextMenu();
@@ -492,6 +497,7 @@ module ScSyncr {
         name: string;
         parentId: string;
         hash: string;
+        latestVersionHash: string;
         icon: string;
 
         constructor(data: ITreeItemDto) {
@@ -499,6 +505,7 @@ module ScSyncr {
             this.name = data.Name;
             this.parentId = data.ParentId;
             this.hash = data.Hash;
+            this.latestVersionHash = data.LatestVersionHash;
             this.icon = data.Icon;
         }
     }
@@ -655,7 +662,7 @@ module ScSyncr {
         progressIndicator: ProgressIndicator = new ProgressIndicator();
         srcSvc: IDataService = new DataService();
         tgtSvc: IDataService = new DataService();
-
+        showLatestVersion: boolean = false;
         //srcSvc: IDataService = new DataServiceMocked();
         //tgtSvc: IDataService = new DataServiceMocked();
 
@@ -691,6 +698,7 @@ module ScSyncr {
         Name: string;
         Children: ITreeItemDto[];
         Hash: string;
+        LatestVersionHash: string;
         Icon: string;
     }
 
@@ -698,6 +706,8 @@ module ScSyncr {
         Item: IItemDto;
         Raw: string;
         Hash: string;
+        LatestVersionRaw: string;
+        LatestVersionHash: string;
     }
 
     export interface IItemDto {
@@ -713,7 +723,7 @@ module ScSyncr {
 
     function mockItem(currentId: string): IItemWrapperDto {
         var t = (Math.random() < 0.5 ? "1111" : "0000");
-        return { Item: null, Hash: t, Raw: t };
+        return { Item: null, Hash: t, Raw: t, LatestVersionHash: t, LatestVersionRaw: t };
     }
 
     function mockTreeItem(currentId: string, mustExist: boolean, addChildren: boolean): ITreeItemDto {
@@ -723,7 +733,7 @@ module ScSyncr {
             return null;
         }
 
-        var treeDto = { Id: currentId.substring(0, 3) + "1", Name: "Node " + currentId + "1", ParentId: currentId, Hash: hash, Children: null, Icon: null };
+        var treeDto: ITreeItemDto = { Id: currentId.substring(0, 3) + "1", Name: "Node " + currentId + "1", ParentId: currentId, Hash: hash, LatestVersionHash: hash, Children: null, Icon: null };
         if (addChildren) {
             treeDto.Children = [];
             for (var i = 0; i < 3; i++) {
@@ -753,7 +763,7 @@ module ScSyncr {
     (() => {
         var qs = parseQuerystring();
         var sl = ServiceLocator.current;
-
+        sl.showLatestVersion = qs.lv === "1";
         sl.srcSvc.setBaseUrl(qs.src);
         sl.srcSvc.db = qs.db;
         sl.tgtSvc.setBaseUrl(qs.tgt);

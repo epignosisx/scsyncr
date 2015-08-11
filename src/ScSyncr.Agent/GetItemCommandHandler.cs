@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Web;
 using Sitecore.Data;
@@ -30,7 +31,8 @@ namespace ScSyncr.Agent
                 }
 
                 SyncItem seri = Sitecore.Data.Serialization.ItemSynchronization.BuildSyncItem(item);
-                context.Response.WriteSyncItem(seri);
+                SyncItem latestSeri = Utils.GetLatestVersions(seri);
+                context.Response.WriteSyncItem(seri, latestSeri);
             }
         }
     }
@@ -42,7 +44,7 @@ namespace ScSyncr.Agent
         public string Name { get; set; }
         public List<TreeItemDto> Children { get; set; }
         public string Hash { get; set; }
-
+        public string LatestVersionHash { get; set; }
         public string Icon { get; set; }
     }
 
@@ -52,36 +54,20 @@ namespace ScSyncr.Agent
         public string Raw { get; set; }
         public string Hash { get; set; }
 
-        //public Guid Id { get; set; }
-        //public string Name { get; set; }
-        //public Guid ParentId { get; set; }
-        //public Guid TemplateId { get; set; }
-        //public Guid BranchId { get; set; }
-        //public string Database { get; set; }
-        //public List<FieldDto> Fields { get; set; }
-        //public string Path { get; set; }
-        //public int Version { get; set; }
+        public string LatestVersionRaw { get; set; }
+        public string LatestVersionHash { get; set; }
     }
-
-    //internal class FieldDto
-    //{
-    //    public Guid Id { get; set; }
-    //    public string Name { get; set; }
-    //    public string Language { get; set; }
-    //    public string Value { get; set; }
-    //}
-
-
 
     internal static class ItemExtensions
     {
-        public static TreeItemDto MapToTreeItemDto(this Item item, string hash, string host)
+        public static TreeItemDto MapToTreeItemDto(this Item item, string hash, string latestVersionHash, string host)
         {
             var dto = new TreeItemDto();
             dto.Id = item.ID.Guid;
             dto.Name = item.Name;
             dto.ParentId = item.ParentID.Guid;
             dto.Hash = hash;
+            dto.LatestVersionHash = latestVersionHash;
             dto.Icon = host + Images.GetThemedImageSource(item.Appearance.Icon);
             return dto;
         }

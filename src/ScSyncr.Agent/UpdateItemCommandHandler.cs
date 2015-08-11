@@ -47,7 +47,8 @@ namespace ScSyncr.Agent
             }
 
             SyncItem outItem = ItemSynchronization.BuildSyncItem(item);
-            context.Response.WriteSyncItem(outItem);
+            SyncItem latestVersion = Utils.GetLatestVersions(outItem);
+            context.Response.WriteSyncItem(outItem, latestVersion);
         }
     }
 }
